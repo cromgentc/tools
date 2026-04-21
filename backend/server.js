@@ -21,16 +21,17 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 /* =========================
-   CORS (SMART + FLEXIBLE)
+   CORS (FIXED)
 ========================= */
 const allowedOrigins = [
-  "http://localhost:5000",
-  "https://recording-tools.onrender.com"
+  "http://localhost:5173", // Vite
+  "http://localhost:3000",
+  "https://recording-tools.onrender.com",
 ];
 
 app.use(
   cors({
-    origin: function (origin, callback) {
+    origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
       if (
@@ -50,32 +51,40 @@ app.use(
 /* =========================
    BODY LIMIT
 ========================= */
-app.use(express.json({ limit: "500mb" }));
-app.use(express.urlencoded({ extended: true, limit: "1000mb" }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 /* =========================
-   STATIC
+   PATH SETUP
 ========================= */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create uploads directory if it doesn't exist
+// uploads folder (absolute path)
 const uploadsDir = path.join(__dirname, "uploads");
+
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log("📁 Created uploads directory");
+  console.log("📁 uploads folder created");
 }
 
-// serve uploads
-app.use("/uploads", express.static("uploads"));
+// static serve
+app.use("/uploads", express.static(uploadsDir));
+
+/* =========================
+   BASE ROUTE
+========================= */
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "🚀 Backend running",
+    url: process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`,
+  });
+});
 
 /* =========================
    ROUTES
 ========================= */
-app.get("/", (req, res) => {
-  res.json({ success: true, message: "🚀 Backend running" });
-});
-
 app.use("/api/recording", recordingRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/script", scriptRoutes);
@@ -90,6 +99,7 @@ app.use("/api/audio", audioRoutes);
 ========================= */
 app.use((err, req, res, next) => {
   console.error("🔥 ERROR:", err.message);
+
   res.status(500).json({
     success: false,
     message: err.message || "Server Error",
@@ -97,16 +107,18 @@ app.use((err, req, res, next) => {
 });
 
 /* =========================
-   START
+   START SERVER
 ========================= */
 const startServer = async () => {
   try {
     await connectDB();
+
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Server running on ${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
     });
+
   } catch (err) {
-    console.error("DB Error:", err.message);
+    console.error("❌ DB ERROR:", err.message);
   }
 };
 
