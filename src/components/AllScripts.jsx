@@ -4,20 +4,10 @@ import toast from "react-hot-toast";
 import { Download, FileText, Clock, Trash2, CheckCircle, Mail, Phone, AlertCircle } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
-export const convertAndDownload = async ({ file, audioUrl, format }) => {
+export const convertAndDownload = async ({ file, format }) => {
   try {
     const formData = new FormData();
-
-    if (file) {
-      formData.append("file", file);
-    } else if (audioUrl) {
-      const res = await fetch(audioUrl);
-      const blob = await res.blob();
-      formData.append("file", blob, "audio.webm");
-    } else {
-      throw new Error("No input");
-    }
-
+    formData.append("file", file);
     formData.append("format", format);
 
     const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
@@ -25,15 +15,24 @@ export const convertAndDownload = async ({ file, audioUrl, format }) => {
       body: formData,
     });
 
-    if (!response.ok) throw new Error("Conversion failed");
+    const data = await response.json();
 
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
+    if (!data.success) {
+      throw new Error(data.message);
+    }
+
+    // 🔥 direct download
+    const res = await fetch(data.url);
+    const blob = await res.blob();
+
+    const blobUrl = window.URL.createObjectURL(blob);
 
     const a = document.createElement("a");
-    a.href = url;
+    a.href = blobUrl;
     a.download = `converted.${format}`;
     a.click();
+
+    window.URL.revokeObjectURL(blobUrl);
 
   } catch (err) {
     console.error(err);

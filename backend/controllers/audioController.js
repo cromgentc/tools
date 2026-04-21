@@ -16,15 +16,13 @@ export const convertAudio = (req, res) => {
 
     const inputFile = req.file.path;
 
-    // ===== SAFE FORMAT =====
+    // ===== FORMAT SAFE =====
     let format = "mp3";
 
     if (req.body.format) {
-      if (Array.isArray(req.body.format)) {
-        format = req.body.format[0];
-      } else {
-        format = req.body.format;
-      }
+      format = Array.isArray(req.body.format)
+        ? req.body.format[0]
+        : req.body.format;
     }
 
     format = String(format).toLowerCase();
@@ -32,36 +30,44 @@ export const convertAudio = (req, res) => {
     const outputName = `${Date.now()}.${format}`;
     const outputFile = path.join("uploads", outputName);
 
-    // ===== 🔥 CRITICAL FIX =====
+    // ===== FFMPEG =====
     ffmpeg(inputFile)
-  .inputOptions("-f webm")   // 👈 important
-  .toFormat(format)          // 👈 enough
+      .inputOptions("-f webm") // 🔥 webm input fix
+      .toFormat(format)
 
-  .on("end", () => {
-    const baseUrl =
-      process.env.BACKEND_URL ||
-      `${req.protocol}://${req.get("host")}`;
+      .on("start", (cmd) => {
+        console.log("FFMPEG CMD:", cmd);
+      })
 
-    res.json({
-      success: true,
-      url: `${baseUrl}/uploads/${outputName}`,
-    });
+      .on("end", () => {
+        console.log("✅ Conversion success");
 
-    fs.unlink(inputFile, () => {});
-  })
+        const baseUrl =
+          process.env.BACKEND_URL ||
+          `${req.protocol}://${req.get("host")}`;
 
-  .on("error", (err) => {
-    console.log("❌ REAL ERROR:", err.message);
+        const fileUrl = `${baseUrl}/uploads/${outputName}`;
 
-    fs.unlink(inputFile, () => {});
+        res.json({
+          success: true,
+          url: fileUrl,
+        });
 
-    res.status(500).json({
-      success: false,
-      message: err.message, // 👈 IMPORTANT
-    });
-  })
+        fs.unlink(inputFile, () => {});
+      })
 
-  .save(outputFile);
+      .on("error", (err) => {
+        console.log("❌ FFMPEG ERROR:", err.message);
+
+        fs.unlink(inputFile, () => {});
+
+        res.status(500).json({
+          success: false,
+          message: err.message,
+        });
+      })
+
+      .save(outputFile);
 
   } catch (err) {
     console.log("SERVER ERROR:", err.message);
