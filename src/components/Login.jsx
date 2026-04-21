@@ -33,12 +33,12 @@ export default function Auth() {
   }, []);
 
   /* ================= CHECK BACKEND ================= */
- useEffect(() => {
+useEffect(() => {
   let isMounted = true;
 
   const checkBackend = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/`);
+      const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
 
       if (!isMounted) return;
 
@@ -52,7 +52,7 @@ export default function Auth() {
     }
   };
 
-  checkBackend(); // 🔥 only once
+  checkBackend();
 
   return () => {
     isMounted = false;

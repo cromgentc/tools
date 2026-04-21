@@ -4,42 +4,6 @@ import toast from "react-hot-toast";
 import { Download, FileText, Clock, Trash2, CheckCircle, Mail, Phone, AlertCircle } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
-// export const convertAndDownload = async ({ file, audioUrl, format }) => {
-//   try {
-//     const formData = new FormData();
-
-//     if (file) {
-//       formData.append("file", file);
-//     } else if (audioUrl) {
-//       const res = await fetch(audioUrl);
-//       const blob = await res.blob();
-//       formData.append("file", blob, "audio.webm");
-//     } else {
-//       throw new Error("No input");
-//     }
-
-//     formData.append("format", format);
-
-//     const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
-//       method: "POST",
-//       body: formData,
-//     });
-
-//     if (!response.ok) throw new Error("Conversion failed");
-
-//     const blob = await response.blob();
-//     const url = window.URL.createObjectURL(blob);
-
-//     const a = document.createElement("a");
-//     a.href = url;
-//     a.download = `converted.${format}`;
-//     a.click();
-
-//   } catch (err) {
-//     console.error(err);
-//   }
-// };
-
 export const convertAndDownload = async ({ file, audioUrl, format }) => {
   try {
     const formData = new FormData();
@@ -61,32 +25,68 @@ export const convertAndDownload = async ({ file, audioUrl, format }) => {
       body: formData,
     });
 
-    const data = await response.json();
+    if (!response.ok) throw new Error("Conversion failed");
 
-    if (!data.success || !data.url) {
-      throw new Error("Conversion failed");
-    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
 
-    // 🔥 SAFE DOWNLOAD (no CORS issue)
-    const res = await fetch(data.url);
-    const blob = await res.blob();
-
-    const blobUrl = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
-
-    a.href = blobUrl;
+    a.href = url;
     a.download = `converted.${format}`;
-    document.body.appendChild(a);
     a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(blobUrl);
 
   } catch (err) {
     console.error(err);
-    toast.error(err.message);
   }
 };
+
+// export const convertAndDownload = async ({ file, audioUrl, format }) => {
+//   try {
+//     const formData = new FormData();
+
+//     if (file) {
+//       formData.append("file", file);
+//     } else if (audioUrl) {
+//       const res = await fetch(audioUrl);
+//       const blob = await res.blob();
+//       formData.append("file", blob, "audio.webm");
+//     } else {
+//       throw new Error("No input");
+//     }
+
+//     formData.append("format", format);
+
+//     const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
+//       method: "POST",
+//       body: formData,
+//     });
+
+//     const data = await response.json();
+
+//     if (!data.success || !data.url) {
+//       throw new Error("Conversion failed");
+//     }
+
+//     // 🔥 SAFE DOWNLOAD (no CORS issue)
+//     const res = await fetch(data.url);
+//     const blob = await res.blob();
+
+//     const blobUrl = window.URL.createObjectURL(blob);
+//     const a = document.createElement("a");
+
+//     a.href = blobUrl;
+//     a.download = `converted.${format}`;
+//     document.body.appendChild(a);
+//     a.click();
+//     a.remove();
+
+//     window.URL.revokeObjectURL(blobUrl);
+
+//   } catch (err) {
+//     console.error(err);
+//     toast.error(err.message);
+//   }
+// };
 
 const handleSubmit = async (e) => {
   e.preventDefault();
