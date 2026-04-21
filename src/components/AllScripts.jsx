@@ -40,7 +40,6 @@ import { API_ENDPOINTS } from "../config/api";
 //   }
 // };
 
-
 export const convertAndDownload = async ({ file, audioUrl, format }) => {
   try {
     const formData = new FormData();
@@ -64,18 +63,31 @@ export const convertAndDownload = async ({ file, audioUrl, format }) => {
 
     const data = await response.json();
 
-    if (!data.success) throw new Error("Conversion failed");
+    if (!data.success || !data.url) {
+      throw new Error("Conversion failed");
+    }
 
-    // 🔥 direct download from URL
+    // 🔥 SAFE DOWNLOAD (no CORS issue)
+    const res = await fetch(data.url);
+    const blob = await res.blob();
+
+    const blobUrl = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = data.url;
+
+    a.href = blobUrl;
     a.download = `converted.${format}`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(blobUrl);
 
   } catch (err) {
     console.error(err);
+    toast.error(err.message);
   }
 };
+
 const handleSubmit = async (e) => {
   e.preventDefault();
 
