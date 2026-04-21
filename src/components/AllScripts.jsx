@@ -375,16 +375,14 @@ export default function AllScripts() {
 
         {/* WAV */}
         <button
-                          onClick={() =>
-                            convertAndDownload({
-                              audioUrl: s.audioLink,
-                              format: "wav",
-                            })
-                          }
-                          className="bg-blue-600 px-2"
-                        >
-                          WAV
-                        </button>
+          onClick={() => convertAndDownload({ 
+            audioUrl: s.audioLink, 
+            format: "wav",
+           })}
+          className="bg-blue-600 px-3 py-1 rounded text-sm font-bold"
+        >
+          WAV
+        </button>
 
       </div>
 
