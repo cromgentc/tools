@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Script from "../models/Script.js";
 import Recording from "../models/Recording.js";
+import { removeRecordingAssets } from "../utils/recordingCleanup.js";
 
 // =========================
 // ADD USER
@@ -169,15 +170,32 @@ export const deleteScript = async (req, res) => {
       return res.status(400).json({ message: "Script ID is required" });
     }
 
-    const deleted = await Script.findByIdAndDelete(id);
+    const script = await Script.findById(id);
 
-    if (!deleted) {
+    if (!script) {
       return res.status(404).json({ message: "Script not found" });
     }
 
+    const recordings = await Recording.find({
+      $or: [{ scriptId: id }, { script: id }],
+    });
+
+    for (const recording of recordings) {
+      await removeRecordingAssets(recording);
+    }
+
+    if (recordings.length > 0) {
+      await Recording.deleteMany({
+        _id: { $in: recordings.map((recording) => recording._id) },
+      });
+    }
+
+    await Script.findByIdAndDelete(id);
+
     res.json({
       success: true,
-      message: "Script deleted successfully",
+      message: "Script and related recordings deleted successfully",
+      deletedRecordings: recordings.length,
     });
 
   } catch (err) {
