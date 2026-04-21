@@ -148,7 +148,7 @@ export default function AllScripts() {
       const a = document.createElement("a");
 
       a.href = blobUrl;
-      a.download = `recording-${script.mobile}.webm`;
+      a.download = `recording-${script.mobile}.wav`;
 
       document.body.appendChild(a);
       a.click();
