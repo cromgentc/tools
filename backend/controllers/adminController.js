@@ -7,6 +7,10 @@ import { removeRecordingAssets } from "../utils/recordingCleanup.js";
 import fs from "fs";
 import xlsx from "xlsx";
 import { serializeUserActivity } from "../utils/userActivity.js";
+import {
+  resolveUserRole,
+  USER_ROLE_VALIDATION_MESSAGE,
+} from "../utils/userRoles.js";
 
 const USER_ACCOUNT_STATUSES = new Set(["active", "inactive", "suspended"]);
 
@@ -15,11 +19,23 @@ const normalizeUserPayload = (input = {}) => ({
   mobile: String(input.mobile ?? input.Mobile ?? input.phone ?? input.Phone ?? "").trim(),
   email: String(input.email ?? input.Email ?? "").trim().toLowerCase(),
   password: String(input.password ?? input.Password ?? input.pass ?? input.Pass ?? "").trim(),
+  role: resolveUserRole(
+    input.role ??
+      input.Role ??
+      input.userRole ??
+      input.user_role ??
+      input["User Role"] ??
+      input["user role"]
+  ),
 });
 
-const validateUserPayload = ({ name, mobile, email, password }) => {
+const validateUserPayload = ({ name, mobile, email, password, role }) => {
   if (!name || !mobile || !email || !password) {
     return "All fields are required";
+  }
+
+  if (!role) {
+    return USER_ROLE_VALIDATION_MESSAGE;
   }
 
   if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
@@ -107,6 +123,7 @@ export const addUser = async (req, res) => {
         name: user.name,
         mobile: user.mobile,
         email: user.email,
+        role: user.role,
       },
     });
   } catch (err) {
@@ -164,6 +181,7 @@ export const bulkAddUsers = async (req, res) => {
           name: user.name,
           mobile: user.mobile,
           email: user.email,
+          role: user.role,
           status: "Added",
         });
       } catch (rowErr) {

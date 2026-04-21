@@ -1,5 +1,9 @@
+const DEFAULT_API_BASE_URL = import.meta.env.DEV
+  ? "http://localhost:5000"
+  : "https://recording-tools.onrender.com";
+
 export const API_BASE_URL = (
-  import.meta.env.VITE_API_URL || "https://recording-tools.onrender.com"
+  import.meta.env.VITE_API_URL || DEFAULT_API_BASE_URL
 ).replace(/\/+$/, "");
 
 export const API_ENDPOINTS = {
@@ -33,6 +37,9 @@ export const API_ENDPOINTS = {
   AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
   AUTH_REGISTER: `${API_BASE_URL}/api/auth/register`,
   AUTH_ACTIVITY: `${API_BASE_URL}/api/auth/activity`,
+  AUTH_FORGOT_PASSWORD_REQUEST: `${API_BASE_URL}/api/auth/forgot-password/request-otp`,
+  AUTH_FORGOT_PASSWORD_VERIFY: `${API_BASE_URL}/api/auth/forgot-password/verify-otp`,
+  AUTH_FORGOT_PASSWORD_RESET: `${API_BASE_URL}/api/auth/forgot-password/reset`,
 
   // User endpoints
   USER_LOGIN: `${API_BASE_URL}/api/user/login`,

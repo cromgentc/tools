@@ -17,8 +17,10 @@ export default function ProtectedRoute({ children, role }) {
     return <Navigate to="/" replace />;
   }
 
+  const allowedRoles = Array.isArray(role) ? role : role ? [role] : [];
+
   // User exists but role doesn't match - redirect to login
-  if (role && user.role !== role) {
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
   }
 

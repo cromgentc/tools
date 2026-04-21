@@ -1,6 +1,13 @@
 import User from "../models/User.js";
 import Script from "../models/Script.js";
 import { serializeUserActivity, touchUserActivity } from "../utils/userActivity.js";
+import {
+  resolveUserRole,
+  USER_ROLE_VALIDATION_MESSAGE,
+} from "../utils/userRoles.js";
+
+const normalizeEmail = (value = "") => String(value ?? "").trim().toLowerCase();
+const normalizeMobile = (value = "") => String(value ?? "").trim();
 
 // =========================
 // USER LOGIN (by mobile)
@@ -8,14 +15,15 @@ import { serializeUserActivity, touchUserActivity } from "../utils/userActivity.
 export const loginUser = async (req, res) => {
   try {
     const { mobile } = req.body;
+    const normalizedMobile = normalizeMobile(mobile);
 
     // ===== VALIDATION =====
-    if (!mobile) {
+    if (!normalizedMobile) {
       return res.status(400).json({ message: "Mobile number is required" });
     }
 
     // Find user
-    const user = await User.findOne({ mobile });
+    const user = await User.findOne({ mobile: normalizedMobile });
 
     if (!user) {
       return res.status(401).json({
@@ -137,37 +145,55 @@ export const completeScript = async (req, res) => {
 // =========================
 export const addUser = async (req, res) => {
   try {
-    const { name, mobile, email, password } = req.body;
+    const { name, mobile, email, password, role } = req.body;
+    const normalizedName = String(name ?? "").trim();
+    const normalizedMobile = normalizeMobile(mobile);
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPassword = String(password ?? "");
+    const resolvedRole = resolveUserRole(role);
 
     // ===== VALIDATION =====
-    if (!name || !mobile || !email || !password) {
+    if (!normalizedName || !normalizedMobile || !normalizedEmail || !normalizedPassword) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
+    if (!resolvedRole) {
+      return res.status(400).json({
+        success: false,
+        message: USER_ROLE_VALIDATION_MESSAGE,
+      });
+    }
+
     // Mobile validation
-    if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
+    if (normalizedMobile.length !== 10 || !/^\d+$/.test(normalizedMobile)) {
       return res.status(400).json({ message: "Mobile must be 10 digits" });
     }
 
     // Email validation
-    if (!email.includes("@")) {
+    if (!normalizedEmail.includes("@") || !normalizedEmail.includes(".")) {
       return res.status(400).json({ message: "Invalid email address" });
     }
 
     // Check existing user
-    const exists = await User.findOne({ $or: [{ mobile }, { email }] });
+    const exists = await User.findOne({
+      $or: [{ mobile: normalizedMobile }, { email: normalizedEmail }],
+    });
     if (exists) {
       return res.status(400).json({ 
-        message: "User with this mobile or email already exists" 
+        message:
+          exists.mobile === normalizedMobile
+            ? "Mobile number already registered"
+            : "Email already registered",
       });
     }
 
     // Create user
     const user = await User.create({
-      name: name.trim(),
-      mobile,
-      email: email.toLowerCase(),
-      password,
+      name: normalizedName,
+      mobile: normalizedMobile,
+      email: normalizedEmail,
+      password: normalizedPassword,
+      role: resolvedRole,
     });
 
     res.json({

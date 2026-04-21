@@ -16,7 +16,7 @@ function App() {
         <Route
           path="/recording"
           element={
-            <ProtectedRoute role="user">
+            <ProtectedRoute role={["user", "vendor"]}>
               <RecordingPage />
             </ProtectedRoute>
           }

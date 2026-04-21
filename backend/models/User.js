@@ -27,9 +27,47 @@ const userSchema = new mongoose.Schema(
 
     password: { type: String, required: true },
 
+    passwordResetOtpHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    passwordResetOtpExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    passwordResetMethod: {
+      type: String,
+      enum: ["email", "mobile", null],
+      default: null,
+      select: false,
+    },
+
+    passwordResetTarget: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    passwordResetSessionHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    passwordResetSessionExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
     role: {
       type: String,
-      default: "user", // user | admin
+      enum: ["user", "admin", "vendor"],
+      default: "user",
     },
 
     // 🔥 SCRIPT SYSTEM

@@ -25,6 +25,7 @@
     "mongoose": "^8.23.0",
     "multer": "^2.1.1",
     "multer-storage-cloudinary": "^4.0.0",
+    "nodemailer": "^8.0.5",
     "react-router-dom": "^7.14.0",
     "recorder-js": "^1.0.7",
     "socket.io": "^4.8.3",
