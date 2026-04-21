@@ -32,6 +32,7 @@ export const API_ENDPOINTS = {
   USER_COMPLETE_SCRIPT: `${API_BASE_URL}/api/user/complete-script`,
   // Audio endpoints
   AUDIO_CONVERT: `${API_BASE_URL}/api/audio/convert`,
+  
 };
 
 // API helper function

@@ -34,7 +34,7 @@ export default function AddScript() {
     try {
       setLoading(true);
 
-      const res = await axios.post("/api/script/assign", {
+      const res = await axios.post(API_ENDPOINTS.SCRIPT_ASSIGN, {
         mobile,
         email,
         content,
@@ -65,7 +65,7 @@ export default function AddScript() {
     try {
       setBulkLoading(true);
 
-      const res = await fetch("/api/script/bulk-upload", {
+      const res = await fetch(API_ENDPOINTS.SCRIPT_BULK_UPLOAD, {
         method: "POST",
         body: formData,
       });
