@@ -24,10 +24,8 @@ const PORT = process.env.PORT || 5000;
    CORS (SMART + FLEXIBLE)
 ========================= */
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:3000",
-   "http://localhost:5000",
-  "https://recording-tools.onrender.com",
+  "http://localhost:5000",
+  "https://recording-tools.onrender.com"
 ];
 
 app.use(

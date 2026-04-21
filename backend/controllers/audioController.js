@@ -60,7 +60,7 @@ export const convertAudio = (req, res) => {
           process.env.BACKEND_URL ||
           `${req.protocol}://${req.get("host")}`;
 
-        const fileUrl = `${baseUrl}/uploads/${outputName}`;
+        const audioLink = `${baseUrl}/uploads/${req.file.filename}`;
 
         // ❌ output delete mat karo
         fs.unlink(inputFile, () => {});
