@@ -103,10 +103,10 @@ export default function AllScripts() {
   }, [navigate]);
 
   // ================= CHECK BACKEND STATUS =================
-  useEffect(() => {
+ useEffect(() => {
   const checkBackend = async () => {
     try {
-      const res = await fetch(CHECK_BACKEND);
+      const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
 
       if (res.ok) {
         setBackendStatus("connected");
