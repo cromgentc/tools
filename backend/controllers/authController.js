@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
+import { serializeUserActivity, touchUserActivity } from "../utils/userActivity.js";
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -89,11 +90,20 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "User not found" });
     }
 
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "This user account is suspended. Please contact admin.",
+      });
+    }
+
     // Verify password
     const isPasswordValid = await user.matchPassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
+
+    const activeUser = await touchUserActivity(user._id);
 
     // Generate token and return
     res.json({
@@ -105,6 +115,7 @@ export const loginUser = async (req, res) => {
         mobile: user.mobile,
         email: user.email,
         role: user.role,
+        ...serializeUserActivity(activeUser || user),
       },
       token: generateToken(user),
     });
@@ -114,6 +125,39 @@ export const loginUser = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: err.message || "Failed to login" 
+    });
+  }
+};
+
+export const reportUserActivity = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const user = await touchUserActivity(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: serializeUserActivity(user),
+    });
+  } catch (err) {
+    console.error("USER ACTIVITY ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to update user activity",
     });
   }
 };

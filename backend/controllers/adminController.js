@@ -1,9 +1,14 @@
 import User from "../models/User.js";
 import Script from "../models/Script.js";
 import Recording from "../models/Recording.js";
+import Record from "../models/Record.js";
+import Metadata from "../models/Metadata.js";
 import { removeRecordingAssets } from "../utils/recordingCleanup.js";
 import fs from "fs";
 import xlsx from "xlsx";
+import { serializeUserActivity } from "../utils/userActivity.js";
+
+const USER_ACCOUNT_STATUSES = new Set(["active", "inactive", "suspended"]);
 
 const normalizeUserPayload = (input = {}) => ({
   name: String(input.name ?? input.Name ?? input.fullName ?? input["Full Name"] ?? "").trim(),
@@ -65,6 +70,26 @@ const createUserRecord = async (rawInput) => {
   }
 
   return User.create(payload);
+};
+
+const buildUserSummary = ({ user, scripts, recordings }) => {
+  const completedScripts = scripts.filter((script) => script.status === "completed").length;
+  const pendingScripts = scripts.filter((script) => script.status === "pending").length;
+
+  return {
+    _id: user._id,
+    name: user.name,
+    mobile: user.mobile,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    totalScripts: scripts.length,
+    completedScripts,
+    pendingScripts,
+    totalRecordings: recordings.length,
+    ...serializeUserActivity(user),
+  };
 };
 
 // =========================
@@ -165,11 +190,285 @@ export const bulkAddUsers = async (req, res) => {
 };
 
 // =========================
+// GET ALL USERS
+// =========================
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({ role: { $ne: "admin" } })
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const userIds = users.map((user) => user._id);
+
+    const [scripts, recordings] = await Promise.all([
+      Script.find({ userId: { $in: userIds } }).select("userId status").lean(),
+      Recording.find({ userId: { $in: userIds } }).select("userId").lean(),
+    ]);
+
+    const scriptsByUser = new Map();
+    const recordingsByUser = new Map();
+
+    for (const script of scripts) {
+      const key = String(script.userId);
+      const current = scriptsByUser.get(key) || [];
+      current.push(script);
+      scriptsByUser.set(key, current);
+    }
+
+    for (const recording of recordings) {
+      const key = String(recording.userId);
+      const current = recordingsByUser.get(key) || [];
+      current.push(recording);
+      recordingsByUser.set(key, current);
+    }
+
+    const result = users.map((user) =>
+      buildUserSummary({
+        user,
+        scripts: scriptsByUser.get(String(user._id)) || [],
+        recordings: recordingsByUser.get(String(user._id)) || [],
+      })
+    );
+
+    res.json({
+      success: true,
+      count: result.length,
+      users: result,
+    });
+  } catch (err) {
+    console.error("GET ALL USERS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to fetch users",
+    });
+  }
+};
+
+// =========================
+// GET USER DETAILS
+// =========================
+export const getUserDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const user = await User.findById(id).select("-password").lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const [scripts, recordings] = await Promise.all([
+      Script.find({ userId: id }).sort({ createdAt: -1 }).lean(),
+      Recording.find({ userId: id })
+        .populate("scriptId", "content status createdAt completedAt")
+        .sort({ uploadedAt: -1 })
+        .lean(),
+    ]);
+
+    const summary = buildUserSummary({
+      user,
+      scripts,
+      recordings,
+    });
+
+    res.json({
+      success: true,
+      user: {
+        ...summary,
+        history: user.history || [],
+        scripts: scripts.map((script) => ({
+          _id: script._id,
+          content: script.content,
+          status: script.status,
+          createdAt: script.createdAt,
+          completedAt: script.completedAt || null,
+        })),
+        recordings: recordings.map((recording) => ({
+          _id: recording._id,
+          audioLink: recording.audioLink,
+          fileSize: recording.fileSize || 0,
+          uploadedAt: recording.uploadedAt,
+          script: recording.scriptId
+            ? {
+                _id: recording.scriptId._id,
+                content: recording.scriptId.content,
+                status: recording.scriptId.status,
+                createdAt: recording.scriptId.createdAt,
+                completedAt: recording.scriptId.completedAt || null,
+              }
+            : null,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error("GET USER DETAILS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to fetch user details",
+    });
+  }
+};
+
+// =========================
+// UPDATE USER STATUS
+// =========================
+export const updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { accountStatus } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    if (!USER_ACCOUNT_STATUSES.has(accountStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user status",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      {
+        accountStatus,
+        updatedAt: new Date(),
+      },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "User status updated successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        ...serializeUserActivity(user),
+      },
+    });
+  } catch (err) {
+    console.error("UPDATE USER STATUS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to update user status",
+    });
+  }
+};
+
+// =========================
+// DELETE USER
+// =========================
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({
+        success: false,
+        message: "Admin users cannot be deleted from this screen",
+      });
+    }
+
+    const userIdString = String(user._id);
+
+    const scripts = await Script.find({
+      $or: [{ userId: id }, { mobile: user.mobile }, { email: user.email }],
+    })
+      .select("_id")
+      .lean();
+
+    const scriptIds = scripts.map((script) => script._id);
+
+    const recordings = await Recording.find({
+      $or: [
+        { userId: id },
+        { user: id },
+        ...(scriptIds.length > 0
+          ? [{ scriptId: { $in: scriptIds } }, { script: { $in: scriptIds } }]
+          : []),
+      ],
+    });
+
+    for (const recording of recordings) {
+      await removeRecordingAssets(recording);
+    }
+
+    if (recordings.length > 0) {
+      await Recording.deleteMany({
+        _id: { $in: recordings.map((recording) => recording._id) },
+      });
+    }
+
+    const [deletedScriptsResult, deletedRecordsResult, deletedMetadataResult] = await Promise.all([
+      Script.deleteMany({
+        $or: [{ userId: id }, { mobile: user.mobile }, { email: user.email }],
+      }),
+      Record.deleteMany({ userId: userIdString }),
+      Metadata.deleteMany({ userId: userIdString }),
+    ]);
+
+    await User.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: "User and all related backend data deleted successfully",
+      deletedScripts: deletedScriptsResult.deletedCount || scripts.length,
+      deletedRecordings: recordings.length,
+      deletedRecords: deletedRecordsResult.deletedCount || 0,
+      deletedMetadata: deletedMetadataResult.deletedCount || 0,
+    });
+  } catch (err) {
+    console.error("DELETE USER ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to delete user",
+    });
+  }
+};
+
+// =========================
 // GET STATS
 // =========================
 export const getStats = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await User.countDocuments({ role: { $ne: "admin" } });
     const totalScripts = await Script.countDocuments();
     const totalRecordings = await Recording.countDocuments();
     

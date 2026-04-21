@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import Script from "../models/Script.js";
+import { serializeUserActivity, touchUserActivity } from "../utils/userActivity.js";
 
 // =========================
 // USER LOGIN (by mobile)
@@ -23,6 +24,15 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "This user account is suspended. Please contact admin.",
+      });
+    }
+
+    const activeUser = await touchUserActivity(user._id);
+
     res.json({
       success: true,
       user: {
@@ -31,6 +41,7 @@ export const loginUser = async (req, res) => {
         mobile: user.mobile,
         email: user.email,
         role: user.role,
+        ...serializeUserActivity(activeUser || user),
       },
     });
 

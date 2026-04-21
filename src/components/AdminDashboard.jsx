@@ -121,7 +121,7 @@ export default function AdminDashboard() {
         <div className="flex-1 p-4 space-y-2">
           {menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
           {menuItem("addScript", "Add Script", <FileText className="w-5 h-5" />)}
-          {menuItem("addUser", "Add User", <Users className="w-5 h-5" />)}
+          {menuItem("addUser", "User Management", <Users className="w-5 h-5" />)}
           {menuItem("all", "All Scripts", <Radio className="w-5 h-5" />)}
         </div>
 
@@ -165,7 +165,7 @@ export default function AdminDashboard() {
             {page === "addUser" && (
               <>
                 <Users className="w-5 h-5 text-purple-400" />
-                Add User
+                User Management
               </>
             )}
             {page === "all" && (

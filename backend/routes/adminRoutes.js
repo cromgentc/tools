@@ -6,8 +6,12 @@ import {
   addUser,
   bulkAddUsers,
   deleteScript,
+  deleteUser,
   getAllScripts,
-  getStats
+  getAllUsers,
+  getStats,
+  getUserDetails,
+  updateUserStatus,
 } from "../controllers/adminController.js";
 
 const router = express.Router();
@@ -57,6 +61,10 @@ const handleBulkUserUpload = (req, res, next) => {
 router.post("/add-user", addUser);
 router.post("/bulk-users", handleBulkUserUpload, bulkAddUsers);
 router.get("/stats", getStats);
+router.get("/users", getAllUsers);
+router.get("/user/:id", getUserDetails);
+router.patch("/user/:id/status", updateUserStatus);
+router.delete("/user/:id", deleteUser);
 router.get("/scripts", getAllScripts);
 router.delete("/script/:id", deleteScript);
 

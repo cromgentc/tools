@@ -90,6 +90,27 @@ export default function RecordingPage() {
   const countdownRef = useRef(null);
   const audioBlobRef = useRef(null);
 
+  const sendActivityBeacon = () => {
+    if (!userId) return;
+
+    const payload = JSON.stringify({ userId });
+
+    if (navigator.sendBeacon) {
+      const blob = new Blob([payload], { type: "application/json" });
+      navigator.sendBeacon(API_ENDPOINTS.AUTH_ACTIVITY, blob);
+      return;
+    }
+
+    fetch(API_ENDPOINTS.AUTH_ACTIVITY, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: payload,
+      keepalive: true,
+    }).catch(() => {});
+  };
+
   // ================= LOGIN CHECK =================
   useEffect(() => {
     if (!user) {
@@ -99,6 +120,7 @@ export default function RecordingPage() {
 
   // ================= LOGOUT =================
   const logout = () => {
+    sendActivityBeacon();
     localStorage.removeItem("userInfo");
     toast.success("Logged out!");
     navigate("/");
@@ -111,7 +133,15 @@ export default function RecordingPage() {
       setLoading(true);
       const url = API_ENDPOINTS.SCRIPT_GET(userId);
       const res = await fetch(url);
-      
+
+      if (res.status === 403) {
+        const data = await res.json();
+        localStorage.removeItem("userInfo");
+        toast.error(data.message || "Your account has been suspended");
+        navigate("/");
+        return;
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       
       const data = await res.json();
@@ -129,6 +159,39 @@ export default function RecordingPage() {
 
   useEffect(() => {
     if (userId) loadScript();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    const sendActivity = () => {
+      fetch(API_ENDPOINTS.AUTH_ACTIVITY, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId }),
+      }).catch(() => {});
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        sendActivityBeacon();
+      }
+    };
+
+    sendActivity();
+
+    const intervalId = setInterval(sendActivity, 60000);
+    window.addEventListener("pagehide", sendActivityBeacon);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener("pagehide", sendActivityBeacon);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      sendActivityBeacon();
+    };
   }, [userId]);
 
   // ================= TIMER =================

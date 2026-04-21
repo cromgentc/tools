@@ -81,6 +81,22 @@ export const getUserScript = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
+    const user = await User.findById(userId).select("accountStatus");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended. Please contact admin.",
+      });
+    }
+
     const script = await Script.findOne({
       userId,
       status: "pending",

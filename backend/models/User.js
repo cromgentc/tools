@@ -33,6 +33,22 @@ const userSchema = new mongoose.Schema(
     },
 
     // 🔥 SCRIPT SYSTEM
+    accountStatus: {
+      type: String,
+      enum: ["active", "inactive", "suspended"],
+      default: "active",
+    },
+
+    lastActiveAt: {
+      type: Date,
+      default: null,
+    },
+
+    totalActiveSeconds: {
+      type: Number,
+      default: 0,
+    },
+
     scripts: [
       {
         type: String,

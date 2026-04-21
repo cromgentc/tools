@@ -1,5 +1,6 @@
 import Recording from "../models/Recording.js";
 import Script from "../models/Script.js";
+import User from "../models/User.js";
 import cloudinary from "../config/cloudinary.js";
 import fs from "fs";
 
@@ -24,6 +25,22 @@ export const uploadAllRecordings = async (req, res) => {
       return res.status(400).json({ 
         success: false,
         message: "Invalid User ID" 
+      });
+    }
+
+    const user = await User.findById(userId).select("accountStatus");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended. Please contact admin.",
       });
     }
 

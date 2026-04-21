@@ -20,6 +20,10 @@ export const API_ENDPOINTS = {
 
   // Admin endpoints
   ADMIN_SCRIPTS: `${API_BASE_URL}/api/admin/scripts`,
+  ADMIN_USERS: `${API_BASE_URL}/api/admin/users`,
+  ADMIN_USER_DETAILS: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
+  ADMIN_USER_STATUS: (id) => `${API_BASE_URL}/api/admin/user/${id}/status`,
+  ADMIN_DELETE_USER: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_DELETE_SCRIPT: (id) => `${API_BASE_URL}/api/admin/script/${id}`,
   ADMIN_ADD_USER: `${API_BASE_URL}/api/admin/add-user`,
   ADMIN_BULK_ADD_USERS: `${API_BASE_URL}/api/admin/bulk-users`,
@@ -28,6 +32,7 @@ export const API_ENDPOINTS = {
   // Auth endpoints
   AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
   AUTH_REGISTER: `${API_BASE_URL}/api/auth/register`,
+  AUTH_ACTIVITY: `${API_BASE_URL}/api/auth/activity`,
 
   // User endpoints
   USER_LOGIN: `${API_BASE_URL}/api/user/login`,

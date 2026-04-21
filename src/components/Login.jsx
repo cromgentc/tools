@@ -80,9 +80,9 @@ useEffect(() => {
         body: JSON.stringify({ mobile, password }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const data = await res.json();
+
+      if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
 
       if (!data.success) throw new Error(data.message || "Login failed");
 
@@ -132,9 +132,9 @@ useEffect(() => {
         body: JSON.stringify({ name, email, mobile, password }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const data = await res.json();
+
+      if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
 
       if (!data.success) throw new Error(data.message || "Registration failed");
 
