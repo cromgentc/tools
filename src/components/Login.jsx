@@ -33,21 +33,31 @@ export default function Auth() {
   }, []);
 
   /* ================= CHECK BACKEND ================= */
-  useEffect(() => {
-    const checkBackend = async () => {
-      try {
-        const res = await fetch("https://recording-tools.onrender.com/");
-        if (res.ok) setBackendStatus("connected");
-        else setBackendStatus("error");
-      } catch {
+ useEffect(() => {
+  let isMounted = true;
+
+  const checkBackend = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/`);
+
+      if (!isMounted) return;
+
+      if (res.ok) {
+        setBackendStatus("connected");
+      } else {
         setBackendStatus("error");
       }
-    };
+    } catch {
+      if (isMounted) setBackendStatus("error");
+    }
+  };
 
-    checkBackend();
-    const interval = setInterval(checkBackend, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  checkBackend(); // 🔥 only once
+
+  return () => {
+    isMounted = false;
+  };
+}, []);
 
   /* ================= LOGIN ================= */
   const handleLogin = async (e) => {

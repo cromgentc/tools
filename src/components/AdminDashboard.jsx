@@ -35,7 +35,7 @@ export default function AdminDashboard() {
   // ================= BACKEND CHECK =================
   const checkBackend = async () => {
   try {
-    const res = await fetch(API_ENDPOINTS.BASE);
+    const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
 
     if (res.ok) setBackendStatus("connected");
     else setBackendStatus("error");
