@@ -22,6 +22,7 @@ export const API_ENDPOINTS = {
   ADMIN_SCRIPTS: `${API_BASE_URL}/api/admin/scripts`,
   ADMIN_DELETE_SCRIPT: (id) => `${API_BASE_URL}/api/admin/script/${id}`,
   ADMIN_ADD_USER: `${API_BASE_URL}/api/admin/add-user`,
+  ADMIN_BULK_ADD_USERS: `${API_BASE_URL}/api/admin/bulk-users`,
   ADMIN_STATS: `${API_BASE_URL}/api/admin/stats`,
 
   // Auth endpoints

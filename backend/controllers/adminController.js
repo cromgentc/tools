@@ -2,51 +2,80 @@ import User from "../models/User.js";
 import Script from "../models/Script.js";
 import Recording from "../models/Recording.js";
 import { removeRecordingAssets } from "../utils/recordingCleanup.js";
+import fs from "fs";
+import xlsx from "xlsx";
+
+const normalizeUserPayload = (input = {}) => ({
+  name: String(input.name ?? input.Name ?? input.fullName ?? input["Full Name"] ?? "").trim(),
+  mobile: String(input.mobile ?? input.Mobile ?? input.phone ?? input.Phone ?? "").trim(),
+  email: String(input.email ?? input.Email ?? "").trim().toLowerCase(),
+  password: String(input.password ?? input.Password ?? input.pass ?? input.Pass ?? "").trim(),
+});
+
+const validateUserPayload = ({ name, mobile, email, password }) => {
+  if (!name || !mobile || !email || !password) {
+    return "All fields are required";
+  }
+
+  if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
+    return "Mobile must be 10 digits";
+  }
+
+  if (!email.includes("@") || !email.includes(".")) {
+    return "Invalid email address";
+  }
+
+  if (password.length < 6) {
+    return "Password must be at least 6 characters";
+  }
+
+  return null;
+};
+
+const safeDeleteFile = (filePath) => {
+  if (filePath && fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+};
+
+const createUserError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const createUserRecord = async (rawInput) => {
+  const payload = normalizeUserPayload(rawInput);
+  const validationError = validateUserPayload(payload);
+
+  if (validationError) {
+    throw createUserError(validationError);
+  }
+
+  const existingUser = await User.findOne({
+    $or: [{ mobile: payload.mobile }, { email: payload.email }],
+  });
+
+  if (existingUser) {
+    throw createUserError(
+      existingUser.mobile === payload.mobile
+        ? "Mobile number already registered"
+        : "Email already registered"
+    );
+  }
+
+  return User.create(payload);
+};
 
 // =========================
 // ADD USER
 // =========================
 export const addUser = async (req, res) => {
   try {
-    const { name, mobile, email, password } = req.body;
-
-    // ===== VALIDATION =====
-    if (!name || !mobile || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    // Mobile validation (10 digits)
-    if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
-      return res.status(400).json({ message: "Mobile must be 10 digits" });
-    }
-
-    // Email validation
-    if (!email.includes("@") || !email.includes(".")) {
-      return res.status(400).json({ message: "Invalid email address" });
-    }
-
-    // Password validation (min 6 chars)
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
-
-    // Check if user exists by mobile or email
-    const existingUser = await User.findOne({ $or: [{ mobile }, { email }] });
-    if (existingUser) {
-      return res.status(400).json({ 
-        message: existingUser.mobile === mobile ? "Mobile number already registered" : "Email already registered" 
-      });
-    }
-
-    // Create user
-    const user = await User.create({
-      name: name.trim(),
-      mobile,
-      email,
-      password,
-    });
+    const user = await createUserRecord(req.body);
 
     res.json({
+      success: true,
       message: "User created successfully",
       user: {
         id: user._id,
@@ -57,7 +86,81 @@ export const addUser = async (req, res) => {
     });
   } catch (err) {
     console.error("ADD USER ERROR:", err);
-    res.status(500).json({ message: err.message || "Failed to create user" });
+    res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || "Failed to create user",
+    });
+  }
+};
+
+// =========================
+// BULK ADD USERS
+// =========================
+export const bulkAddUsers = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
+
+    const workbook = xlsx.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+
+    if (!sheetName) {
+      safeDeleteFile(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: "Excel or CSV file is empty",
+      });
+    }
+
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(worksheet, { defval: "" });
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      safeDeleteFile(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: "Excel or CSV file is empty or invalid format",
+      });
+    }
+
+    const inserted = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i += 1) {
+      try {
+        const user = await createUserRecord(rows[i]);
+
+        inserted.push({
+          userId: user._id,
+          name: user.name,
+          mobile: user.mobile,
+          email: user.email,
+          status: "Added",
+        });
+      } catch (rowErr) {
+        errors.push(`Row ${i + 1}: ${rowErr.message}`);
+      }
+    }
+
+    safeDeleteFile(req.file.path);
+
+    res.json({
+      success: true,
+      message: `Bulk user upload completed. ${inserted.length} users added, ${errors.length} errors`,
+      inserted,
+      errors,
+    });
+  } catch (err) {
+    safeDeleteFile(req.file?.path);
+    console.error("BULK ADD USER ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to process bulk user upload",
+    });
   }
 };
 
