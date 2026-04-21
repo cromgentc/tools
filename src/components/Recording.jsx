@@ -136,13 +136,7 @@ export default function RecordingPage() {
     setDuration(0);
 
     timerRef.current = setInterval(() => {
-      setDuration((prev) => {
-        if (prev >= 20) {
-          stopRecording();
-          return prev;
-        }
-        return prev + 1;
-      });
+      setDuration((prev) => prev + 1);
     }, 1000);
   };
 
