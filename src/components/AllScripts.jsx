@@ -70,7 +70,7 @@ export default function AllScripts() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch("http://localhost:5000");
+        const response = await fetch("https://recording-tools.onrender.com/");
         if (response.ok) {
           setBackendStatus("connected");
         } else {
