@@ -74,7 +74,7 @@ export const uploadAllRecordings = async (req, res) => {
       // If Cloudinary fails, serve from local uploads folder
       console.warn("⚠️ Cloudinary upload failed, using local storage:", cloudinaryErr.message);
       const localFilePath = req.file.path.replace(/\\/g, "/");
-      audioLink = `${process.env.BACKEND_URL || "http://localhost:5000"}/uploads/${req.file.filename}`;
+      audioLink = `${process.env.BACKEND_URL || "https://recording-tools.onrender.com/"}/uploads/${req.file.filename}`;
       public_id = null; // No public_id for local files
     }
 
