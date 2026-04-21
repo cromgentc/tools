@@ -69,7 +69,16 @@ export const convertAndDownload = async ({ file, audioUrl, format }) => {
     });
 
     if (!response.ok) {
-      throw new Error("Conversion failed");
+      let errorMessage = "Conversion failed";
+
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch {
+        // Ignore JSON parse errors and fall back to the generic message.
+      }
+
+      throw new Error(errorMessage);
     }
 
     const convertedBlob = await response.blob();

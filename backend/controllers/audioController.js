@@ -3,9 +3,8 @@ import ffmpegPath from "ffmpeg-static";
 import fs from "fs";
 import path from "path";
 
-if (ffmpegPath) {
-  ffmpeg.setFfmpegPath(ffmpegPath);
-}
+const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath || "ffmpeg";
+ffmpeg.setFfmpegPath(resolvedFfmpegPath);
 
 const ALLOWED_FORMATS = new Set(["mp3", "wav"]);
 const UPLOADS_DIR = "uploads";
@@ -63,6 +62,7 @@ export const convertAudio = (req, res) => {
     command
       .on("start", (ffmpegCommand) => {
         console.log("FFMPEG CMD:", ffmpegCommand);
+        console.log("FFMPEG PATH:", resolvedFfmpegPath);
       })
       .on("end", () => {
         res.download(outputFile, `converted.${format}`, (downloadErr) => {
