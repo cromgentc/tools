@@ -2,7 +2,7 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export const API_ENDPOINTS = {
-  CHECK_BACKEND: `${API_BASE_URL}/`,
+ CHECK_BACKEND: `${API_BASE_URL}`,
   // Recording endpoints
   RECORDING_UPLOAD: `${API_BASE_URL}/api/recording/upload`,
   RECORDING_SCRIPTS: `${API_BASE_URL}/api/recording/scripts-with-audio`,
