@@ -36,7 +36,7 @@ export default function Auth() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const res = await fetch("http://localhost:5000");
+        const res = await fetch("https://recording-tools.onrender.com/");
         if (res.ok) setBackendStatus("connected");
         else setBackendStatus("error");
       } catch {
