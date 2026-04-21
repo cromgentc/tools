@@ -7,6 +7,7 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 export const convertAudio = (req, res) => {
   try {
+    // ================= FILE CHECK =================
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -16,24 +17,30 @@ export const convertAudio = (req, res) => {
 
     const inputFile = req.file.path;
 
-    // 🔥 SAFE FORMAT FIX (MAIN FIX)
+    // ================= FORMAT FIX =================
     let rawFormat = req.body.format;
 
-    const format = Array.isArray(rawFormat)
-      ? rawFormat[0]
-      : typeof rawFormat === "string"
-      ? rawFormat
-      : "mp3";
+    let format;
+
+    if (Array.isArray(rawFormat)) {
+      format = rawFormat[0];
+    } else if (typeof rawFormat === "string") {
+      format = rawFormat;
+    } else {
+      format = "mp3";
+    }
 
     const finalFormat = format.toLowerCase();
 
+    // ================= OUTPUT =================
     const outputName = `${Date.now()}.${finalFormat}`;
     const outputFile = path.join("uploads", outputName);
 
+    // ================= FFMPEG =================
     ffmpeg(inputFile)
       .toFormat(finalFormat)
       .on("end", () => {
-        // 🔥 Dynamic URL FIX (no undefined issue)
+        // 🔥 Dynamic base URL (no undefined issue)
         const baseUrl =
           process.env.BACKEND_URL ||
           `${req.protocol}://${req.get("host")}`;
@@ -45,7 +52,7 @@ export const convertAudio = (req, res) => {
           url: fileUrl,
         });
 
-        // cleanup input file
+        // delete input file
         fs.unlink(inputFile, () => {});
       })
       .on("error", (err) => {
@@ -61,13 +68,14 @@ export const convertAudio = (req, res) => {
       .save(outputFile);
 
   } catch (err) {
+    console.error("CONTROLLER ERROR:", err.message);
+
     res.status(500).json({
       success: false,
       message: err.message,
     });
   }
 };
-
 
 // import ffmpeg from "fluent-ffmpeg";
 // import fs from "fs";
