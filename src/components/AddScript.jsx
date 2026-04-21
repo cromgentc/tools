@@ -1,7 +1,9 @@
 import { useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
+import { API_ENDPOINTS } from "../config/api";
 import { Mail, Phone, FileText, Upload, CheckCircle, Send } from "lucide-react";
+
 
 export default function AddScript() {
   const [mobile, setMobile] = useState("");
