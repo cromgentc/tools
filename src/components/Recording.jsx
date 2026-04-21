@@ -6,6 +6,67 @@ import {
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
+const writeString = (view, offset, value) => {
+  for (let i = 0; i < value.length; i += 1) {
+    view.setUint8(offset + i, value.charCodeAt(i));
+  }
+};
+
+const audioBufferToWav = (audioBuffer) => {
+  const numberOfChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const format = 1;
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numberOfChannels * bytesPerSample;
+  const dataLength = audioBuffer.length * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numberOfChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(view, 36, "data");
+  view.setUint32(40, dataLength, true);
+
+  const channelData = [];
+  for (let channel = 0; channel < numberOfChannels; channel += 1) {
+    channelData.push(audioBuffer.getChannelData(channel));
+  }
+
+  let offset = 44;
+  for (let i = 0; i < audioBuffer.length; i += 1) {
+    for (let channel = 0; channel < numberOfChannels; channel += 1) {
+      const sample = Math.max(-1, Math.min(1, channelData[channel][i]));
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, intSample, true);
+      offset += bytesPerSample;
+    }
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+};
+
+const convertBlobToWav = async (blob) => {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    return audioBufferToWav(audioBuffer);
+  } finally {
+    await audioContext.close();
+  }
+};
+
 export default function RecordingPage() {
   const navigate = useNavigate();
 
@@ -135,15 +196,21 @@ export default function RecordingPage() {
 
     const recorder = mediaRecorder.current;
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunks.current, { type: "audio/webm" });
+    recorder.onstop = async () => {
+      try {
+        const blob = new Blob(chunks.current, { type: "audio/webm" });
+        const wavBlob = await convertBlobToWav(blob);
 
-      audioBlobRef.current = blob;
+        audioBlobRef.current = wavBlob;
 
-      const url = URL.createObjectURL(blob);
-      setAudioURL(url);
-
-      setStatus("recorded");
+        const url = URL.createObjectURL(wavBlob);
+        setAudioURL(url);
+        setStatus("recorded");
+      } catch (err) {
+        console.error("Audio conversion error:", err);
+        toast.error("Failed to process recording");
+        setStatus("idle");
+      }
     };
 
     recorder.stop();
@@ -174,8 +241,7 @@ export default function RecordingPage() {
       setUploading(true);
 
       const formData = new FormData();
-      // Add filename with .webm extension so multer recognizes it as audio
-      formData.append("audio", audioBlobRef.current, "recording.webm");
+      formData.append("audio", audioBlobRef.current, "recording.wav");
       formData.append("userId", userId);
       formData.append("scriptId", scriptId);
 

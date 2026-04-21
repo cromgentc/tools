@@ -179,21 +179,6 @@ export default function AllScripts() {
     }
   };
 
-  const downloadAudio = async (url, script) => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error("Audio file not found");
-      }
-
-      const blob = await res.blob();
-      triggerBrowserDownload(blob, `recording-${script.mobile}.wav`);
-    } catch (err) {
-      console.error(err);
-      toast.error(err.message || "Download failed");
-    }
-  };
-
   const downloadAllAudio = async () => {
     const audioScripts = scripts.filter((script) => script.audioLink);
 
@@ -204,15 +189,18 @@ export default function AllScripts() {
 
     try {
       setDownloading(true);
-      const toastId = toast.loading(`Downloading ${audioScripts.length} file(s)...`);
+      const toastId = toast.loading(`Downloading ${audioScripts.length} WAV file(s)...`);
 
       for (const script of audioScripts) {
-        await downloadAudio(script.audioLink, script);
+        await convertAndDownload({
+          audioUrl: script.audioLink,
+          format: "wav",
+        });
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       toast.dismiss(toastId);
-      toast.success(`Downloaded ${audioScripts.length} audio file(s)!`);
+      toast.success(`Downloaded ${audioScripts.length} WAV file(s)!`);
     } catch (err) {
       console.error("DOWNLOAD ALL ERROR:", err);
       toast.error("Bulk download failed");
@@ -403,24 +391,13 @@ export default function AllScripts() {
                             onClick={() =>
                               convertAndDownload({
                                 audioUrl: script.audioLink,
-                                format: "mp3",
-                              })
-                            }
-                            className="rounded bg-green-600 px-3 py-1 text-sm font-bold"
-                          >
-                            MP3
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              convertAndDownload({
-                                audioUrl: script.audioLink,
                                 format: "wav",
                               })
                             }
-                            className="rounded bg-blue-600 px-3 py-1 text-sm font-bold"
+                            className="flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-sm font-bold"
                           >
-                            WAV
+                            <Download className="h-4 w-4" />
+                            Download WAV
                           </button>
                         </div>
                       </div>
