@@ -1,20 +1,61 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Download, FileText, Clock, Trash2, CheckCircle, Mail, Phone, AlertCircle } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Clock,
+  Trash2,
+  CheckCircle,
+  Mail,
+  Phone,
+  AlertCircle,
+} from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
-/* ================= CONVERT + DOWNLOAD ================= */
+const normalizeScripts = (payload) => {
+  const scriptList = Array.isArray(payload)
+    ? payload
+    : payload?.success && Array.isArray(payload.scripts)
+      ? payload.scripts
+      : null;
+
+  if (!scriptList) {
+    throw new Error("Invalid response");
+  }
+
+  return scriptList.map((script) => ({
+    ...script,
+    audioLink: API_ENDPOINTS.RESOLVE_MEDIA_URL(script.audioLink),
+  }));
+};
+
+const triggerBrowserDownload = (blob, fileName) => {
+  const blobUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = blobUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(blobUrl);
+};
+
 export const convertAndDownload = async ({ file, audioUrl, format }) => {
   try {
     const formData = new FormData();
 
-    // 🔥 MUST FIX: always send "file"
     if (file) {
       formData.append("file", file);
     } else if (audioUrl) {
-      const res = await fetch(audioUrl);
-      const blob = await res.blob();
+      const sourceRes = await fetch(audioUrl);
+      if (!sourceRes.ok) {
+        throw new Error("Audio file not found");
+      }
+
+      const blob = await sourceRes.blob();
       formData.append("file", blob, "audio.webm");
     } else {
       throw new Error("No input file");
@@ -27,30 +68,16 @@ export const convertAndDownload = async ({ file, audioUrl, format }) => {
       body: formData,
     });
 
-    const data = await response.json();
-
-    if (!data.success || !data.url) {
-      throw new Error(data.message || "Conversion failed");
+    if (!response.ok) {
+      throw new Error("Conversion failed");
     }
 
-    // 🔥 SAFE DOWNLOAD
-    const res = await fetch(data.url);
-    const blob = await res.blob();
-
-    const blobUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-
-    a.href = blobUrl;
-    a.download = `converted.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(blobUrl);
-
+    const convertedBlob = await response.blob();
+    triggerBrowserDownload(convertedBlob, `converted.${format}`);
+    toast.success(`${format.toUpperCase()} downloaded`);
   } catch (err) {
     console.error(err);
-    toast.error(err.message);
+    toast.error(err.message || "Conversion failed");
   }
 };
 
@@ -61,61 +88,57 @@ export default function AllScripts() {
   const [backendStatus, setBackendStatus] = useState("checking");
   const navigate = useNavigate();
 
-  /* ================= AUTH CHECK ================= */
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("userInfo"));
+    let user = null;
+
+    try {
+      user = JSON.parse(localStorage.getItem("userInfo"));
+    } catch {
+      user = null;
+    }
 
     if (!user || user.role !== "admin") {
       toast.error("Access denied. Admin only.");
-      navigate("/");
+      navigate("/", { replace: true });
     }
   }, [navigate]);
 
-  /* ================= CHECK BACKEND ================= */
   useEffect(() => {
-    const checkBackend = async () => {
+    const initializePage = async () => {
       try {
         const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
-
-        if (res.ok) setBackendStatus("connected");
-        else setBackendStatus("error");
+        setBackendStatus(res.ok ? "connected" : "error");
       } catch {
         setBackendStatus("error");
       }
+
+      try {
+        setLoading(true);
+        const res = await fetch(API_ENDPOINTS.RECORDING_SCRIPTS);
+        const data = await res.json();
+        setScripts(normalizeScripts(data));
+        setBackendStatus("connected");
+      } catch (err) {
+        console.error(err);
+        toast.error("Load failed");
+        setBackendStatus("error");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    checkBackend();
+    initializePage();
   }, []);
 
-  /* ================= LOAD ================= */
   const load = async () => {
     try {
       setLoading(true);
 
       const res = await fetch(API_ENDPOINTS.RECORDING_SCRIPTS);
-
       const data = await res.json();
 
-      if (Array.isArray(data)) {
-        setScripts(
-          data.map((script) => ({
-            ...script,
-            audioLink: API_ENDPOINTS.RESOLVE_MEDIA_URL(script.audioLink),
-          }))
-        );
-      } else if (data.success && Array.isArray(data.scripts)) {
-        setScripts(
-          data.scripts.map((script) => ({
-            ...script,
-            audioLink: API_ENDPOINTS.RESOLVE_MEDIA_URL(script.audioLink),
-          }))
-        );
-      } else {
-        throw new Error("Invalid response");
-      }
-
+      setScripts(normalizeScripts(data));
       setBackendStatus("connected");
-
     } catch (err) {
       console.error(err);
       toast.error("Load failed");
@@ -125,9 +148,8 @@ export default function AllScripts() {
     }
   };
 
-  /* ================= DELETE ================= */
   const del = async (id) => {
-    if (!confirm("Delete this script?")) return;
+    if (!window.confirm("Delete this script?")) return;
 
     try {
       const res = await fetch(API_ENDPOINTS.ADMIN_DELETE_SCRIPT(id), {
@@ -136,45 +158,36 @@ export default function AllScripts() {
 
       const data = await res.json();
 
-      if (data.success) {
-        toast.success("Deleted");
-        load();
-      } else {
-        throw new Error(data.message);
+      if (!data.success) {
+        throw new Error(data.message || "Delete failed");
       }
 
+      toast.success("Deleted");
+      load();
     } catch (err) {
-      toast.error("Delete failed");
+      console.error(err);
+      toast.error(err.message || "Delete failed");
     }
   };
 
-  /* ================= DOWNLOAD AUDIO ================= */
   const downloadAudio = async (url, script) => {
     try {
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error("Audio file not found");
+      }
+
       const blob = await res.blob();
-
-      const blobUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-
-      a.href = blobUrl;
-      a.download = `recording-${script.mobile}.wav`;
-
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      window.URL.revokeObjectURL(blobUrl);
-
-    } catch {
-      toast.error("Download failed");
+      triggerBrowserDownload(blob, `recording-${script.mobile}.wav`);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Download failed");
     }
   };
 
-  // ================= DOWNLOAD ALL =================
   const downloadAllAudio = async () => {
-    const audioScripts = scripts.filter((s) => s.audioLink);
-    
+    const audioScripts = scripts.filter((script) => script.audioLink);
+
     if (audioScripts.length === 0) {
       toast.error("No audio files to download");
       return;
@@ -183,12 +196,12 @@ export default function AllScripts() {
     try {
       setDownloading(true);
       const toastId = toast.loading(`Downloading ${audioScripts.length} file(s)...`);
-      
-      for (let s of audioScripts) {
-        await downloadAudio(s.audioLink, s);
-        await new Promise((r) => setTimeout(r, 500));
+
+      for (const script of audioScripts) {
+        await downloadAudio(script.audioLink, script);
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      
+
       toast.dismiss(toastId);
       toast.success(`Downloaded ${audioScripts.length} audio file(s)!`);
     } catch (err) {
@@ -198,66 +211,76 @@ export default function AllScripts() {
       setDownloading(false);
     }
   };
-    
-  return (
-    <div className="p-6 text-white bg-gradient-to-br from-gray-950 via-gray-900 to-black min-h-screen">
 
-      {/* BACKEND STATUS WARNING */}
+  const completedCount = scripts.filter((script) => script.status === "completed").length;
+  const pendingCount = scripts.filter((script) => script.status === "pending").length;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black p-6 text-white">
       {backendStatus === "error" && (
-        <div className="mb-6 p-4 bg-red-900/20 border border-red-600/50 rounded-lg flex items-start gap-3">
-          <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-600/50 bg-red-900/20 p-4">
+          <AlertCircle className="mt-0.5 h-6 w-6 flex-shrink-0 text-red-400" />
           <div>
-            <h3 className="text-red-400 font-semibold mb-1">Backend Connection Error</h3>
-            <p className="text-red-300 text-sm mb-3">Cannot connect to backend on port 5000. Please:</p>
-            <ol className="text-red-300 text-sm space-y-1 list-decimal list-inside">
-              <li>Open a terminal and run: <code className="bg-black/40 px-2 py-1 rounded">cd backend && npm start</code></li>
-              <li>Make sure backend shows: "🚀 Server running on 5000"</li>
+            <h3 className="mb-1 font-semibold text-red-400">Backend Connection Error</h3>
+            <p className="mb-3 text-sm text-red-300">
+              Cannot connect to the backend server. Please:
+            </p>
+            <ol className="list-inside list-decimal space-y-1 text-sm text-red-300">
+              <li>
+                Open a terminal and run{" "}
+                <code className="rounded bg-black/40 px-2 py-1">cd backend && npm start</code>
+              </li>
+              <li>Make sure the backend server is running properly</li>
               <li>Refresh this page</li>
             </ol>
           </div>
         </div>
       )}
 
-      {/* HEADER */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-3xl font-bold text-blue-400 flex items-center gap-2">
-            <FileText className="w-8 h-8" />
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-3xl font-bold text-blue-400">
+            <FileText className="h-8 w-8" />
             Scripts & Recordings Dashboard
           </h2>
           <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${backendStatus === "connected" ? "bg-green-500" : "bg-red-500"} animate-pulse`}></div>
-            <span className="text-sm text-gray-400">{backendStatus === "connected" ? "Connected" : "Offline"}</span>
+            <div
+              className={`h-3 w-3 rounded-full ${
+                backendStatus === "connected" ? "bg-green-500" : "bg-red-500"
+              } animate-pulse`}
+            />
+            <span className="text-sm text-gray-400">
+              {backendStatus === "connected" ? "Connected" : "Offline"}
+            </span>
           </div>
         </div>
         <p className="text-gray-400">
-          Total recordings: <span className="text-green-400 font-semibold">{scripts.length}</span>
+          Total recordings: <span className="font-semibold text-green-400">{scripts.length}</span>
           {" • "}
-          Completed: <span className="text-blue-400 font-semibold">{scripts.filter(s => s.status === "completed").length}</span>
+          Completed: <span className="font-semibold text-blue-400">{completedCount}</span>
           {" • "}
-          Pending: <span className="text-yellow-400 font-semibold">{scripts.filter(s => s.status === "pending").length}</span>
+          Pending: <span className="font-semibold text-yellow-400">{pendingCount}</span>
         </p>
       </div>
 
-      {/* ACTION BUTTONS */}
-      <div className="flex gap-3 mb-6 flex-wrap">
+      <div className="mb-6 flex flex-wrap gap-3">
         <button
           onClick={downloadAllAudio}
           disabled={downloading || scripts.length === 0 || backendStatus === "error"}
-          className={`px-6 py-2 rounded-lg font-semibold transition-all active:scale-95 flex items-center gap-2 ${
+          className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
             downloading || scripts.length === 0 || backendStatus === "error"
-              ? "bg-gray-600 cursor-not-allowed opacity-60"
+              ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
           }`}
         >
           {downloading ? (
             <>
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
               Downloading...
             </>
           ) : (
             <>
-              <Download className="w-5 h-5" />
+              <Download className="h-5 w-5" />
               Download All Audio
             </>
           )}
@@ -266,15 +289,15 @@ export default function AllScripts() {
         <button
           onClick={load}
           disabled={loading}
-          className={`px-6 py-2 rounded-lg font-semibold transition-all active:scale-95 ${
+          className={`rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
             loading
-              ? "bg-gray-600 cursor-not-allowed opacity-60"
+              ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
           }`}
         >
           {loading ? (
             <>
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent inline-block mr-2"></div>
+              <div className="mr-2 inline-block h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
               Refreshing...
             </>
           ) : (
@@ -283,33 +306,29 @@ export default function AllScripts() {
         </button>
       </div>
 
-      {/* LOADING STATE */}
       {loading && (
-        <div className="flex justify-center items-center py-16">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+        <div className="flex items-center justify-center py-16">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
         </div>
       )}
 
-      {/* EMPTY STATE */}
       {!loading && scripts.length === 0 && (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
-          <FileText className="w-16 h-16 mx-auto text-gray-500 mb-4" />
-          <p className="text-gray-400 text-lg">No scripts found</p>
+        <div className="rounded-lg border border-gray-700 bg-gray-800 p-12 text-center">
+          <FileText className="mx-auto mb-4 h-16 w-16 text-gray-500" />
+          <p className="text-lg text-gray-400">No scripts found</p>
           <button
             onClick={load}
-            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors"
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 font-semibold transition-colors hover:bg-blue-700"
           >
             Try Again
           </button>
         </div>
       )}
 
-      {/* TABLE CONTAINER */}
       {!loading && scripts.length > 0 && (
-        <div className="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700 shadow-xl">
+        <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800 shadow-xl">
           <table className="w-full">
-
-            <thead className="bg-gradient-to-r from-gray-700 to-gray-800 sticky top-0 z-10">
+            <thead className="sticky top-0 z-10 bg-gradient-to-r from-gray-700 to-gray-800">
               <tr>
                 <th className="border-b border-gray-600 p-3 text-left">Mobile</th>
                 <th className="border-b border-gray-600 p-3 text-left">Email</th>
@@ -322,106 +341,101 @@ export default function AllScripts() {
             </thead>
 
             <tbody>
-              {scripts.map((s) => (
-                <tr key={s._id} className="hover:bg-gray-700 transition-colors border-b border-gray-700">
-
-                  {/* MOBILE */}
+              {scripts.map((script) => (
+                <tr
+                  key={script._id}
+                  className="border-b border-gray-700 transition-colors hover:bg-gray-700"
+                >
                   <td className="p-3">
                     <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-blue-400" />
-                      <span className="font-mono text-green-400">{s.mobile}</span>
+                      <Phone className="h-4 w-4 text-blue-400" />
+                      <span className="font-mono text-green-400">{script.mobile}</span>
                     </div>
                   </td>
 
-                  {/* EMAIL */}
                   <td className="p-3">
                     <div className="flex items-center gap-2 truncate">
-                      <Mail className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                      <span className="text-gray-300 truncate text-sm">{s.email || "N/A"}</span>
+                      <Mail className="h-4 w-4 flex-shrink-0 text-purple-400" />
+                      <span className="truncate text-sm text-gray-300">
+                        {script.email || "N/A"}
+                      </span>
                     </div>
                   </td>
 
-                  {/* CONTENT */}
-                  <td className="p-3 max-w-xs">
-                    <p className="text-gray-300 truncate text-sm" title={s.content}>
-                      {s.content?.substring(0, 50)}...
+                  <td className="max-w-xs p-3">
+                    <p className="truncate text-sm text-gray-300" title={script.content}>
+                      {script.content ? `${script.content.substring(0, 50)}...` : "No content"}
                     </p>
                   </td>
 
-                  {/* STATUS */}
                   <td className="p-3">
-                    {s.status === "completed" ? (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-600/20 text-green-400 rounded-full text-sm font-semibold border border-green-600/50">
-                        <CheckCircle className="w-4 h-4" />
+                    {script.status === "completed" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-green-600/50 bg-green-600/20 px-3 py-1 text-sm font-semibold text-green-400">
+                        <CheckCircle className="h-4 w-4" />
                         Completed
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded-full text-sm font-semibold border border-yellow-600/50">
-                        <Clock className="w-4 h-4" />
+                      <span className="inline-flex items-center gap-1 rounded-full border border-yellow-600/50 bg-yellow-600/20 px-3 py-1 text-sm font-semibold text-yellow-400">
+                        <Clock className="h-4 w-4" />
                         Pending
                       </span>
                     )}
                   </td>
 
                   <td className="p-3">
-  {s.audioLink ? (
-    <div className="flex flex-col gap-3">
+                    {script.audioLink ? (
+                      <div className="flex flex-col gap-3">
+                        <audio controls className="w-full max-w-xs" preload="none">
+                          <source src={script.audioLink} />
+                        </audio>
 
-      {/* PLAYER */}
-      <audio controls className="w-full max-w-xs">
-        <source src={s.audioLink} />
-      </audio>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              convertAndDownload({
+                                audioUrl: script.audioLink,
+                                format: "mp3",
+                              })
+                            }
+                            className="rounded bg-green-600 px-3 py-1 text-sm font-bold"
+                          >
+                            MP3
+                          </button>
 
-      {/* BUTTONS */}
-      <div className="flex gap-2">
-
-        {/* MP3 */}
-        <button
-          onClick={() => convertAndDownload({ audioUrl: s.audioLink, format: "mp3" })}
-          className="bg-green-600 px-3 py-1 rounded text-sm font-bold"
-        >
-          MP3
-        </button>
-
-        {/* WAV */}
-        <button
-          onClick={() => convertAndDownload({ 
-            audioUrl: s.audioLink, 
-            format: "wav",
-           })}
-          className="bg-blue-600 px-3 py-1 rounded text-sm font-bold"
-        >
-          WAV
-        </button>
-
-      </div>
-
-    </div>
-  ) : (
-    <span>No audio</span>
-  )}
-</td>
-
-                  {/* DATE */}
-                  <td className="p-3 text-gray-400 text-sm whitespace-nowrap">
-                    {new Date(s.createdAt).toLocaleString()}
+                          <button
+                            onClick={() =>
+                              convertAndDownload({
+                                audioUrl: script.audioLink,
+                                format: "wav",
+                              })
+                            }
+                            className="rounded bg-blue-600 px-3 py-1 text-sm font-bold"
+                          >
+                            WAV
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">No audio</span>
+                    )}
                   </td>
 
-                  {/* ACTION */}
+                  <td className="whitespace-nowrap p-3 text-sm text-gray-400">
+                    {new Date(script.createdAt).toLocaleString()}
+                  </td>
+
                   <td className="p-3 text-center">
                     <button
-                      onClick={() => del(s._id)}
-                      className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded font-semibold transition-colors active:scale-95 flex items-center gap-1 justify-center text-sm"
+                      onClick={() => del(script._id)}
+                      className="flex items-center justify-center gap-1 rounded bg-red-600 px-3 py-1 text-sm font-semibold transition-colors active:scale-95 hover:bg-red-700"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                       Delete
                     </button>
                   </td>
-
                 </tr>
               ))}
             </tbody>
-
           </table>
         </div>
       )}
