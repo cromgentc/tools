@@ -1,6 +1,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { User, Mail, Lock, Phone, UserPlus } from "lucide-react";
+import { API_ENDPOINTS } from "../config/api";
 
 export default function AddUser() {
   const [name, setName] = useState("");
@@ -29,17 +30,17 @@ export default function AddUser() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/admin/add-user", {
+      const res = await fetch(API_ENDPOINTS.ADMIN_ADD_USER, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           name,
           email,
           mobile,
-          password
-        })
+          password,
+        }),
       });
 
       const data = await res.json();
