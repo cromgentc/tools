@@ -31,12 +31,13 @@ export const API_ENDPOINTS = {
   // User endpoints
   USER_LOGIN: `${API_BASE_URL}/api/user/login`,
   USER_GET_SCRIPT: (mobile) =>
-    `${API_BASE_URL}/api/user/script?mobile=${mobile}`,
+    `${API_BASE_URL}/api/user/script?mobile=${encodeURIComponent(mobile)}`,
   USER_COMPLETE_SCRIPT: `${API_BASE_URL}/api/user/complete-script`,
 
   // Audio endpoints
   AUDIO_CONVERT: `${API_BASE_URL}/api/audio/convert`,
 
+  // Media helper
   RESOLVE_MEDIA_URL: (url) => {
     if (!url || typeof url !== "string") return null;
 
@@ -44,7 +45,9 @@ export const API_ENDPOINTS = {
     if (!trimmed) return null;
 
     if (/^https?:\/\//i.test(trimmed)) {
-      return trimmed.replace("http://localhost:5000", API_BASE_URL);
+      return trimmed
+        .replace("http://localhost:5000", API_BASE_URL)
+        .replace("https://localhost:5000", API_BASE_URL);
     }
 
     if (trimmed.startsWith("undefined/")) {
@@ -65,10 +68,12 @@ export const API_ENDPOINTS = {
 
 export const fetchAPI = async (url, options = {}) => {
   try {
+    const isFormData = options.body instanceof FormData;
+
     const response = await fetch(url, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...options.headers,
       },
     });
