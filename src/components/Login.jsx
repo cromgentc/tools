@@ -36,7 +36,7 @@ export default function Auth() {
  useEffect(() => {
   const checkBackend = async () => {
     try {
-      const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
+      const res = await fetch(API_ENDPOINTS.AUTH_LOGIN);
 
       if (res.ok) setBackendStatus("connected");
       else setBackendStatus("error");
