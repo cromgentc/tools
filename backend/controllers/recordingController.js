@@ -61,15 +61,19 @@ export const uploadAllRecordings = async (req, res) => {
     let public_id;
     
     try {
-      // Try uploading to Cloudinary with raw resource type
+      // Audio files are best delivered from Cloudinary via the video resource type.
       const result = await cloudinary.uploader.upload(req.file.path, {
-        resource_type: "raw", // Use raw for non-image/video files
-        folder: 'audio_uploads',
+        resource_type: "video",
+        folder: "audio_uploads",
         public_id: `recording-${Date.now()}`,
       });
-      audioLink = result.secure_url;
+      audioLink = result.secure_url.replace("/raw/upload/", "/video/upload/");
       public_id = result.public_id;
-      console.log("✅ Cloudinary upload successful:", public_id);
+      console.log("✅ Cloudinary upload successful:", {
+        public_id,
+        resource_type: result.resource_type,
+        audioLink,
+      });
     } catch (cloudinaryErr) {
       // If Cloudinary fails, serve from local uploads folder
       console.warn("⚠️ Cloudinary upload failed, using local storage:", cloudinaryErr.message);

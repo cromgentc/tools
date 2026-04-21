@@ -47,7 +47,8 @@ export const API_ENDPOINTS = {
     if (/^https?:\/\//i.test(trimmed)) {
       return trimmed
         .replace("http://localhost:5000", API_BASE_URL)
-        .replace("https://localhost:5000", API_BASE_URL);
+        .replace("https://localhost:5000", API_BASE_URL)
+        .replace("/raw/upload/", "/video/upload/");
     }
 
     if (trimmed.startsWith("undefined/")) {
