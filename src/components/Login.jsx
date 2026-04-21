@@ -488,7 +488,7 @@ export default function Auth() {
                   />
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Account Role
                   </label>
@@ -505,7 +505,7 @@ export default function Auth() {
                   <p className="mt-2 text-xs text-gray-400">
                     Blank chhodoge to account automatically user role se register hoga.
                   </p>
-                </div>
+                </div> */}
               </>
             )}
 
