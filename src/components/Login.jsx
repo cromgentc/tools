@@ -33,20 +33,21 @@ export default function Auth() {
   }, []);
 
   /* ================= CHECK BACKEND ================= */
- useEffect(() => {
-  const checkBackend = async () => {
-    try {
-      const res = await fetch(API_ENDPOINTS.AUTH_LOGIN);
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const res = await fetch("http://localhost:5000");
+        if (res.ok) setBackendStatus("connected");
+        else setBackendStatus("error");
+      } catch {
+        setBackendStatus("error");
+      }
+    };
 
-      if (res.ok) setBackendStatus("connected");
-      else setBackendStatus("error");
-    } catch {
-      setBackendStatus("error");
-    }
-  };
-
-  checkBackend();
-}, []);
+    checkBackend();
+    const interval = setInterval(checkBackend, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   /* ================= LOGIN ================= */
   const handleLogin = async (e) => {
