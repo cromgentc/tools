@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Download, FileText, Clock, Trash2, CheckCircle, Mail, Phone, AlertCircle } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
+import ffmpegPath from "ffmpeg-static";
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 /* ================= CONVERT + DOWNLOAD ================= */
 export const convertAndDownload = async ({ file, audioUrl, format }) => {
