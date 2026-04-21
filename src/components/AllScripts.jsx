@@ -68,26 +68,23 @@ export default function AllScripts() {
 
   // ================= CHECK BACKEND STATUS =================
   useEffect(() => {
-    const checkBackend = async () => {
-      try {
-        const response = await fetch("https://recording-tools.onrender.com/");
-        if (response.ok) {
-          setBackendStatus("connected");
-        } else {
-          setBackendStatus("error");
-        }
-      } catch (err) {
-        console.warn("Backend not available on port 5000");
+  const checkBackend = async () => {
+    try {
+      const res = await fetch(CHECK_BACKEND);
+
+      if (res.ok) {
+        setBackendStatus("connected");
+      } else {
         setBackendStatus("error");
       }
-    };
+    } catch (err) {
+      console.warn("Backend not reachable:", err.message);
+      setBackendStatus("error");
+    }
+  };
 
-    checkBackend();
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, []);
+  checkBackend();
+}, []);
 
   // ================= LOAD =================
   const load = async () => {
