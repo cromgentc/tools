@@ -7,7 +7,6 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 export const convertAudio = (req, res) => {
   try {
-    // ================= FILE CHECK =================
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -17,58 +16,62 @@ export const convertAudio = (req, res) => {
 
     const inputFile = req.file.path;
 
-    // ================= FORMAT FIX =================
-    let rawFormat = req.body.format;
+    // ===== SAFE FORMAT =====
+    let format = "mp3";
 
-    let format;
-
-    if (Array.isArray(rawFormat)) {
-      format = rawFormat[0];
-    } else if (typeof rawFormat === "string") {
-      format = rawFormat;
-    } else {
-      format = "mp3";
+    if (req.body.format) {
+      if (Array.isArray(req.body.format)) {
+        format = req.body.format[0];
+      } else {
+        format = req.body.format;
+      }
     }
 
-    const finalFormat = format.toLowerCase();
+    format = String(format).toLowerCase();
 
-    // ================= OUTPUT =================
-    const outputName = `${Date.now()}.${finalFormat}`;
+    const outputName = `${Date.now()}.${format}`;
     const outputFile = path.join("uploads", outputName);
 
-    // ================= FFMPEG =================
+    // ===== 🔥 CRITICAL FIX =====
     ffmpeg(inputFile)
-      .toFormat(finalFormat)
+      .inputOptions("-f webm") // 👈 MUST (your files are webm)
+      .audioCodec("libmp3lame") // 👈 ensures mp3 works
+      .toFormat(format)
+
+      .on("start", (cmd) => {
+        console.log("FFMPEG START:", cmd);
+      })
+
       .on("end", () => {
-        // 🔥 Dynamic base URL (no undefined issue)
+        console.log("✅ Conversion done");
+
         const baseUrl =
           process.env.BACKEND_URL ||
           `${req.protocol}://${req.get("host")}`;
 
-        const fileUrl = `${baseUrl}/uploads/${outputName}`;
-
         res.json({
           success: true,
-          url: fileUrl,
+          url: `${baseUrl}/uploads/${outputName}`,
         });
 
-        // delete input file
         fs.unlink(inputFile, () => {});
       })
+
       .on("error", (err) => {
-        console.log("FFMPEG ERROR:", err.message);
+        console.log("❌ FFMPEG ERROR:", err.message);
 
         fs.unlink(inputFile, () => {});
 
         res.status(500).json({
           success: false,
-          message: "Conversion failed",
+          message: err.message, // 👈 अब real error आएगा
         });
       })
+
       .save(outputFile);
 
   } catch (err) {
-    console.error("CONTROLLER ERROR:", err.message);
+    console.log("SERVER ERROR:", err.message);
 
     res.status(500).json({
       success: false,
