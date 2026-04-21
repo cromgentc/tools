@@ -24,7 +24,7 @@ export default function Auth() {
       if (userInfo) {
         const user = JSON.parse(userInfo);
         if (user?._id && user?.role) {
-          user.role === "admin" ? navigate("/admin-dashboard", { replace: true }) : navigate("/recording", { replace: true });
+          user.role === "admin" ? navigate("admin-dashboard", { replace: true }) : navigate("/recording", { replace: true });
         }
       }
     } catch (err) {
