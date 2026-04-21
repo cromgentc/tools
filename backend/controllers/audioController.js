@@ -43,10 +43,10 @@ export const convertAudio = (req, res) => {
         console.log("✅ Conversion success");
 
         const baseUrl =
-          process.env.BACKEND_URL ||
-          `${req.protocol}://${req.get("host")}`;
+  process.env.BACKEND_URL ||
+  "https://recording-tools.onrender.com";
 
-        const fileUrl = `${baseUrl}/uploads/${outputName}`;
+const fileUrl = `${baseUrl}/uploads/${filename}`;
 
         res.json({
           success: true,
