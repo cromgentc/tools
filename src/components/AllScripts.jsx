@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Download, FileText, Clock, Trash2, CheckCircle, Mail, Phone, AlertCircle } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
-import ffmpegPath from "ffmpeg-static";
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 /* ================= CONVERT + DOWNLOAD ================= */
 export const convertAndDownload = async ({ file, audioUrl, format }) => {
@@ -99,9 +97,19 @@ export default function AllScripts() {
       const data = await res.json();
 
       if (Array.isArray(data)) {
-        setScripts(data);
+        setScripts(
+          data.map((script) => ({
+            ...script,
+            audioLink: API_ENDPOINTS.RESOLVE_MEDIA_URL(script.audioLink),
+          }))
+        );
       } else if (data.success && Array.isArray(data.scripts)) {
-        setScripts(data.scripts);
+        setScripts(
+          data.scripts.map((script) => ({
+            ...script,
+            audioLink: API_ENDPOINTS.RESOLVE_MEDIA_URL(script.audioLink),
+          }))
+        );
       } else {
         throw new Error("Invalid response");
       }
