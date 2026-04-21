@@ -1,119 +1,101 @@
-// import ffmpeg from "fluent-ffmpeg";
-// import ffmpegPath from "ffmpeg-static";
-// import fs from "fs";
-// import path from "path";
-
-// ffmpeg.setFfmpegPath(ffmpegPath);
-
-// export const convertAudio = (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "No file uploaded",
-//       });
-//     }
-
-//     const inputFile = req.file.path;
-
-//     // ===== FORMAT SAFE =====
-//     let format = "mp3";
-
-//     if (req.body.format) {
-//       format = Array.isArray(req.body.format)
-//         ? req.body.format[0]
-//         : req.body.format;
-//     }
-
-//     format = String(format).toLowerCase();
-
-//     const outputName = `${Date.now()}.${format}`;
-//     const outputFile = path.join("uploads", outputName);
-
-//     // ===== FFMPEG =====
-//     ffmpeg(inputFile)
-//       .inputOptions("-f webm") // 🔥 webm input fix
-//       .toFormat(format)
-
-//       .on("start", (cmd) => {
-//         console.log("FFMPEG CMD:", cmd);
-//       })
-
-//       .on("end", () => {
-//         console.log("✅ Conversion success");
-
-//         const baseUrl =
-//   process.env.BACKEND_URL ||
-//   "https://recording-tools.onrender.com";
-
-// const fileUrl = `${baseUrl}/uploads/${filename}`;
-
-//         res.json({
-//           success: true,
-//           url: fileUrl,
-//         });
-
-//         fs.unlink(inputFile, () => {});
-//       })
-
-//       .on("error", (err) => {
-//         console.log("❌ FFMPEG ERROR:", err.message);
-
-//         fs.unlink(inputFile, () => {});
-
-//         res.status(500).json({
-//           success: false,
-//           message: err.message,
-//         });
-//       })
-
-//       .save(outputFile);
-
-//   } catch (err) {
-//     console.log("SERVER ERROR:", err.message);
-
-//     res.status(500).json({
-//       success: false,
-//       message: err.message,
-//     });
-//   }
-// };
-
 import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
 import fs from "fs";
 import path from "path";
 
-ffmpeg.setFfmpegPath("C:\\ffmpeg\\bin\\ffmpeg.exe");
+if (ffmpegPath) {
+  ffmpeg.setFfmpegPath(ffmpegPath);
+}
+
+const ALLOWED_FORMATS = new Set(["mp3", "wav"]);
+const UPLOADS_DIR = "uploads";
+
+const safeUnlink = (filePath) => {
+  if (!filePath) return;
+
+  fs.unlink(filePath, () => {});
+};
 
 export const convertAudio = (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
+    if (!req.file?.path) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
+
+    const requestedFormat = Array.isArray(req.body?.format)
+      ? req.body.format[0]
+      : req.body?.format;
+
+    const format = String(requestedFormat || "mp3").trim().toLowerCase();
+
+    if (!ALLOWED_FORMATS.has(format)) {
+      safeUnlink(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid format. Only mp3 and wav are supported.",
+      });
+    }
+
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
 
     const inputFile = req.file.path;
-    const format = (req.body.format || "mp3").toLowerCase();
+    const outputFile = path.join(UPLOADS_DIR, `${Date.now()}.${format}`);
 
-    const outputFile = `uploads/${Date.now()}.${format}`;
+    const command = ffmpeg(inputFile)
+      .noVideo()
+      .format(format)
+      .outputOptions("-y");
 
-    ffmpeg(inputFile)
-      .toFormat(format)
+    if (format === "mp3") {
+      command.audioCodec("libmp3lame");
+    } else {
+      command.audioCodec("pcm_s16le");
+      command.audioFrequency(44100);
+      command.audioChannels(2);
+    }
+
+    command
+      .on("start", (ffmpegCommand) => {
+        console.log("FFMPEG CMD:", ffmpegCommand);
+      })
       .on("end", () => {
-        res.download(outputFile, () => {
-          fs.unlink(inputFile, () => {});
-          fs.unlink(outputFile, () => {});
+        res.download(outputFile, `converted.${format}`, (downloadErr) => {
+          if (downloadErr) {
+            console.error("DOWNLOAD ERROR:", downloadErr.message);
+          }
+
+          safeUnlink(inputFile);
+          safeUnlink(outputFile);
         });
       })
       .on("error", (err) => {
-        console.log(err.message);
-        fs.unlink(inputFile, () => {});
-        return res.status(500).json({ error: "Conversion failed" });
+        console.error("FFMPEG ERROR:", err.message);
+
+        safeUnlink(inputFile);
+        safeUnlink(outputFile);
+
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: err.message || "Conversion failed",
+          });
+        }
       })
       .save(outputFile);
-
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("AUDIO CONVERT ERROR:", err.message);
+
+    safeUnlink(req.file?.path);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Conversion failed",
+    });
   }
 };
-
-
