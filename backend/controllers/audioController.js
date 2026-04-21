@@ -34,41 +34,34 @@ export const convertAudio = (req, res) => {
 
     // ===== 🔥 CRITICAL FIX =====
     ffmpeg(inputFile)
-      .inputOptions("-f webm") // 👈 MUST (your files are webm)
-      .audioCodec("libmp3lame") // 👈 ensures mp3 works
-      .toFormat(format)
+  .inputOptions("-f webm")   // 👈 important
+  .toFormat(format)          // 👈 enough
 
-      .on("start", (cmd) => {
-        console.log("FFMPEG START:", cmd);
-      })
+  .on("end", () => {
+    const baseUrl =
+      process.env.BACKEND_URL ||
+      `${req.protocol}://${req.get("host")}`;
 
-      .on("end", () => {
-        console.log("✅ Conversion done");
+    res.json({
+      success: true,
+      url: `${baseUrl}/uploads/${outputName}`,
+    });
 
-        const baseUrl =
-          process.env.BACKEND_URL ||
-          `${req.protocol}://${req.get("host")}`;
+    fs.unlink(inputFile, () => {});
+  })
 
-        res.json({
-          success: true,
-          url: `${baseUrl}/uploads/${outputName}`,
-        });
+  .on("error", (err) => {
+    console.log("❌ REAL ERROR:", err.message);
 
-        fs.unlink(inputFile, () => {});
-      })
+    fs.unlink(inputFile, () => {});
 
-      .on("error", (err) => {
-        console.log("❌ FFMPEG ERROR:", err.message);
+    res.status(500).json({
+      success: false,
+      message: err.message, // 👈 IMPORTANT
+    });
+  })
 
-        fs.unlink(inputFile, () => {});
-
-        res.status(500).json({
-          success: false,
-          message: err.message, // 👈 अब real error आएगा
-        });
-      })
-
-      .save(outputFile);
+  .save(outputFile);
 
   } catch (err) {
     console.log("SERVER ERROR:", err.message);
