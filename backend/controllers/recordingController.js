@@ -70,23 +70,13 @@ export const uploadAllRecordings = async (req, res) => {
       audioLink = result.secure_url;
       public_id = result.public_id;
       console.log("✅ Cloudinary upload successful:", public_id);
-    // } catch (cloudinaryErr) {
-    //   // If Cloudinary fails, serve from local uploads folder
-    //   console.warn("⚠️ Cloudinary upload failed, using local storage:", cloudinaryErr.message);
-    //   const localFilePath = req.file.path.replace(/\\/g, "/");
-    //   audioLink = `${process.env.BACKEND_URL || "http://localhost:5000"}/uploads/${req.file.filename}`;
-    //   public_id = null; // No public_id for local files
-    // }
-    } catch (error) {
-  console.warn("⚠️ Cloudinary failed, using local storage:", error.message);
-
-  // ===== LOCAL FALLBACK =====
-  const baseUrl =
-    process.env.BACKEND_URL ||
-    `${req.protocol}://${req.get("host")}`;
-
-  audioLink = `${baseUrl}/uploads/${req.file.filename}`;
-}
+    } catch (cloudinaryErr) {
+      // If Cloudinary fails, serve from local uploads folder
+      console.warn("⚠️ Cloudinary upload failed, using local storage:", cloudinaryErr.message);
+      const localFilePath = req.file.path.replace(/\\/g, "/");
+      audioLink = `${process.env.BACKEND_URL || "http://localhost:5000"}/uploads/${req.file.filename}`;
+      public_id = null; // No public_id for local files
+    }
 
     // ===== SAVE IN MONGODB =====
     const recording = await Recording.create({
