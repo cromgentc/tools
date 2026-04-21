@@ -27,8 +27,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:5000",
-  "https://cromgen-recording-tools.vercel.app",
-  "https://cromgen-recording-tools.onrender.com/",
+  "https://recording-tools.onrender.com",
 ];
 
 app.use(
