@@ -4,10 +4,22 @@ import toast from "react-hot-toast";
 import { Download, FileText, Clock, Trash2, CheckCircle, Mail, Phone, AlertCircle } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
-export const convertAndDownload = async ({ file, format }) => {
+/* ================= CONVERT + DOWNLOAD ================= */
+export const convertAndDownload = async ({ file, audioUrl, format }) => {
   try {
     const formData = new FormData();
-    formData.append("file", file);
+
+    // 🔥 MUST FIX: always send "file"
+    if (file) {
+      formData.append("file", file);
+    } else if (audioUrl) {
+      const res = await fetch(audioUrl);
+      const blob = await res.blob();
+      formData.append("file", blob, "audio.webm");
+    } else {
+      throw new Error("No input file");
+    }
+
     formData.append("format", format);
 
     const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
@@ -17,82 +29,29 @@ export const convertAndDownload = async ({ file, format }) => {
 
     const data = await response.json();
 
-    if (!data.success) {
-      throw new Error(data.message);
+    if (!data.success || !data.url) {
+      throw new Error(data.message || "Conversion failed");
     }
 
-    // 🔥 direct download
+    // 🔥 SAFE DOWNLOAD
     const res = await fetch(data.url);
     const blob = await res.blob();
 
     const blobUrl = window.URL.createObjectURL(blob);
-
     const a = document.createElement("a");
+
     a.href = blobUrl;
     a.download = `converted.${format}`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
 
     window.URL.revokeObjectURL(blobUrl);
 
   } catch (err) {
     console.error(err);
+    toast.error(err.message);
   }
-};
-
-// export const convertAndDownload = async ({ file, audioUrl, format }) => {
-//   try {
-//     const formData = new FormData();
-
-//     if (file) {
-//       formData.append("file", file);
-//     } else if (audioUrl) {
-//       const res = await fetch(audioUrl);
-//       const blob = await res.blob();
-//       formData.append("file", blob, "audio.webm");
-//     } else {
-//       throw new Error("No input");
-//     }
-
-//     formData.append("format", format);
-
-//     const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
-//       method: "POST",
-//       body: formData,
-//     });
-
-//     const data = await response.json();
-
-//     if (!data.success || !data.url) {
-//       throw new Error("Conversion failed");
-//     }
-
-//     // 🔥 SAFE DOWNLOAD (no CORS issue)
-//     const res = await fetch(data.url);
-//     const blob = await res.blob();
-
-//     const blobUrl = window.URL.createObjectURL(blob);
-//     const a = document.createElement("a");
-
-//     a.href = blobUrl;
-//     a.download = `converted.${format}`;
-//     document.body.appendChild(a);
-//     a.click();
-//     a.remove();
-
-//     window.URL.revokeObjectURL(blobUrl);
-
-//   } catch (err) {
-//     console.error(err);
-//     toast.error(err.message);
-//   }
-// };
-
-const handleSubmit = async (e) => {
-  e.preventDefault();
-
-  if (!file) return alert("Select file");
-
-  await convertAndDownload({ file, format });
 };
 
 export default function AllScripts() {
@@ -102,8 +61,7 @@ export default function AllScripts() {
   const [backendStatus, setBackendStatus] = useState("checking");
   const navigate = useNavigate();
 
-  
-  // ================= AUTH CHECK =================
+  /* ================= AUTH CHECK ================= */
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("userInfo"));
 
@@ -113,120 +71,93 @@ export default function AllScripts() {
     }
   }, [navigate]);
 
-  // ================= CHECK BACKEND STATUS =================
- useEffect(() => {
-  const checkBackend = async () => {
-    try {
-      const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
+  /* ================= CHECK BACKEND ================= */
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const res = await fetch(API_ENDPOINTS.CHECK_BACKEND);
 
-      if (res.ok) {
-        setBackendStatus("connected");
-      } else {
+        if (res.ok) setBackendStatus("connected");
+        else setBackendStatus("error");
+      } catch {
         setBackendStatus("error");
       }
-    } catch (err) {
-      console.warn("Backend not reachable:", err.message);
-      setBackendStatus("error");
-    }
-  };
+    };
 
-  checkBackend();
-}, []);
+    checkBackend();
+  }, []);
 
-  // ================= LOAD =================
+  /* ================= LOAD ================= */
   const load = async () => {
     try {
       setLoading(true);
+
       const res = await fetch(API_ENDPOINTS.RECORDING_SCRIPTS);
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
+
       const data = await res.json();
-      
-      // Handle different response formats
-      if (data.success && Array.isArray(data.scripts)) {
-        setScripts(data.scripts);
-        setBackendStatus("connected");
-      } else if (Array.isArray(data)) {
+
+      if (Array.isArray(data)) {
         setScripts(data);
-        setBackendStatus("connected");
+      } else if (data.success && Array.isArray(data.scripts)) {
+        setScripts(data.scripts);
       } else {
-        console.error("Response format:", data);
-        toast.error("Invalid response format from server");
-        setScripts([]);
+        throw new Error("Invalid response");
       }
+
+      setBackendStatus("connected");
+
     } catch (err) {
-      console.error("LOAD ERROR:", err);
-      toast.error(`Failed to load scripts: ${err.message}`);
-      setScripts([]);
+      console.error(err);
+      toast.error("Load failed");
       setBackendStatus("error");
     } finally {
       setLoading(false);
     }
   };
 
-  // ================= DELETE =================
+  /* ================= DELETE ================= */
   const del = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this script and its recording?")) return;
-    
+    if (!confirm("Delete this script?")) return;
+
     try {
       const res = await fetch(API_ENDPOINTS.ADMIN_DELETE_SCRIPT(id), {
         method: "DELETE",
       });
 
-      if (!res.ok) {
-        throw new Error(`Failed to delete: ${res.status}`);
-      }
-
       const data = await res.json();
-      
+
       if (data.success) {
-        toast.success("Script deleted successfully");
+        toast.success("Deleted");
         load();
       } else {
-        toast.error(data.message || "Failed to delete script");
+        throw new Error(data.message);
       }
+
     } catch (err) {
-      console.error("DELETE ERROR:", err);
-      toast.error("Delete operation failed");
+      toast.error("Delete failed");
     }
   };
 
-  // ================= DOWNLOAD =================
+  /* ================= DOWNLOAD AUDIO ================= */
   const downloadAudio = async (url, script) => {
-    if (!url) {
-      toast.error("No audio available to download");
-      return;
-    }
-
     try {
-      setDownloading(true);
       const res = await fetch(url);
-      
-      if (!res.ok) {
-        throw new Error("Failed to fetch audio file");
-      }
-
       const blob = await res.blob();
-      const timestamp = new Date().toISOString().split("T")[0];
+
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
 
       a.href = blobUrl;
-      a.download = `recording-${timestamp}-${script.mobile}.webm`;
+      a.download = `recording-${script.mobile}.webm`;
+
       document.body.appendChild(a);
       a.click();
       a.remove();
 
       window.URL.revokeObjectURL(blobUrl);
-      toast.success("Audio downloaded successfully!");
-    } catch (err) {
-      console.error("DOWNLOAD ERROR:", err);
+
+    } catch {
       toast.error("Download failed");
-    } finally {
-      setDownloading(false);
     }
   };
 
@@ -444,11 +375,16 @@ export default function AllScripts() {
 
         {/* WAV */}
         <button
-          onClick={() => convertAndDownload({ audioUrl: s.audioLink, format: "wav" })}
-          className="bg-blue-600 px-3 py-1 rounded text-sm font-bold"
-        >
-          WAV
-        </button>
+                          onClick={() =>
+                            convertAndDownload({
+                              audioUrl: s.audioLink,
+                              format: "wav",
+                            })
+                          }
+                          className="bg-blue-600 px-2"
+                        >
+                          WAV
+                        </button>
 
       </div>
 
