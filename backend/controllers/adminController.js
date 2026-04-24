@@ -108,6 +108,32 @@ const buildUserSummary = ({ user, scripts, recordings }) => {
   };
 };
 
+const findRelatedScripts = async (user) =>
+  Script.find({
+    $or: [{ userId: user._id }, { mobile: user.mobile }, { email: user.email }],
+  })
+    .select("_id")
+    .lean();
+
+const buildRelatedRecordingsQuery = (userId, scriptIds = []) => ({
+  $or: [
+    { userId },
+    { user: userId },
+    ...(scriptIds.length > 0
+      ? [{ scriptId: { $in: scriptIds } }, { script: { $in: scriptIds } }]
+      : []),
+  ],
+});
+
+const getLinkedScriptIdsFromRecordings = (recordings = []) => [
+  ...new Set(
+    recordings
+      .flatMap((recording) => [recording.scriptId, recording.script])
+      .filter(Boolean)
+      .map((value) => String(value))
+  ),
+];
+
 // =========================
 // ADD USER
 // =========================
@@ -427,23 +453,11 @@ export const deleteUser = async (req, res) => {
 
     const userIdString = String(user._id);
 
-    const scripts = await Script.find({
-      $or: [{ userId: id }, { mobile: user.mobile }, { email: user.email }],
-    })
-      .select("_id")
-      .lean();
+    const scripts = await findRelatedScripts(user);
 
     const scriptIds = scripts.map((script) => script._id);
 
-    const recordings = await Recording.find({
-      $or: [
-        { userId: id },
-        { user: id },
-        ...(scriptIds.length > 0
-          ? [{ scriptId: { $in: scriptIds } }, { script: { $in: scriptIds } }]
-          : []),
-      ],
-    });
+    const recordings = await Recording.find(buildRelatedRecordingsQuery(id, scriptIds));
 
     for (const recording of recordings) {
       await removeRecordingAssets(recording);
@@ -478,6 +492,81 @@ export const deleteUser = async (req, res) => {
     res.status(500).json({
       success: false,
       message: err.message || "Failed to delete user",
+    });
+  }
+};
+
+// =========================
+// DELETE ALL USER RECORDINGS
+// =========================
+export const deleteAllUserRecordings = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const user = await User.findById(id).select("name mobile email");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const scripts = await findRelatedScripts(user);
+    const scriptIds = scripts.map((script) => script._id);
+    const recordings = await Recording.find(buildRelatedRecordingsQuery(id, scriptIds));
+
+    if (recordings.length === 0) {
+      return res.json({
+        success: true,
+        message: "No recordings found for this user",
+        deletedRecordings: 0,
+        resetScripts: 0,
+      });
+    }
+
+    for (const recording of recordings) {
+      await removeRecordingAssets(recording);
+    }
+
+    await Recording.deleteMany({
+      _id: { $in: recordings.map((recording) => recording._id) },
+    });
+
+    const linkedScriptIds = getLinkedScriptIdsFromRecordings(recordings);
+    let resetScripts = 0;
+
+    if (linkedScriptIds.length > 0) {
+      const resetResult = await Script.updateMany(
+        { _id: { $in: linkedScriptIds } },
+        {
+          status: "pending",
+          completedAt: null,
+          $unset: { audioLink: "" },
+        }
+      );
+
+      resetScripts = resetResult.modifiedCount || 0;
+    }
+
+    res.json({
+      success: true,
+      message: `All recordings deleted successfully for ${user.mobile}`,
+      deletedRecordings: recordings.length,
+      resetScripts,
+    });
+  } catch (err) {
+    console.error("DELETE ALL USER RECORDINGS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to delete user recordings",
     });
   }
 };

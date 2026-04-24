@@ -27,6 +27,7 @@ export const API_ENDPOINTS = {
   ADMIN_USERS: `${API_BASE_URL}/api/admin/users`,
   ADMIN_USER_DETAILS: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_USER_STATUS: (id) => `${API_BASE_URL}/api/admin/user/${id}/status`,
+  ADMIN_DELETE_USER_RECORDINGS: (id) => `${API_BASE_URL}/api/admin/user/${id}/recordings`,
   ADMIN_DELETE_USER: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_DELETE_SCRIPT: (id) => `${API_BASE_URL}/api/admin/script/${id}`,
   ADMIN_ADD_USER: `${API_BASE_URL}/api/admin/add-user`,

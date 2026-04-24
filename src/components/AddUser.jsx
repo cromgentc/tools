@@ -251,7 +251,8 @@ export default function AddUser() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
-  const [deletingUser, setDeletingUser] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const [deletingAllRecordings, setDeletingAllRecordings] = useState(false);
   const [downloadingAllRecordings, setDownloadingAllRecordings] = useState(false);
 
   const resetSingleForm = () => {
@@ -471,19 +472,19 @@ export default function AddUser() {
     }
   };
 
-  const handleDeleteUser = async () => {
-    if (!selectedUser) return;
+  const deleteUserRecord = async (userToDelete) => {
+    if (!userToDelete?._id) return;
 
     const confirmed = window.confirm(
-      `Delete ${selectedUser.name}? This will remove user, scripts, recordings and backend files permanently.`
+      `Are you sure to delete ${userToDelete.name}? This will permanently remove the user and related data.`
     );
 
     if (!confirmed) return;
 
     try {
-      setDeletingUser(true);
+      setDeletingUserId(userToDelete._id);
 
-      const res = await fetch(API_ENDPOINTS.ADMIN_DELETE_USER(selectedUser._id), {
+      const res = await fetch(API_ENDPOINTS.ADMIN_DELETE_USER(userToDelete._id), {
         method: "DELETE",
       });
 
@@ -495,8 +496,11 @@ export default function AddUser() {
 
       toast.success(data.message || "User deleted successfully");
 
-      setSelectedUser(null);
-      setSelectedUserId(null);
+      if (selectedUserId === userToDelete._id) {
+        setSelectedUser(null);
+        setSelectedUserId(null);
+      }
+
       const nextUsers = await fetchUsers();
 
       if (nextUsers.length === 0) {
@@ -506,7 +510,52 @@ export default function AddUser() {
       console.error("DELETE USER ERROR:", err);
       toast.error(err.message || "Failed to delete user");
     } finally {
-      setDeletingUser(false);
+      setDeletingUserId(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    await deleteUserRecord(selectedUser);
+  };
+
+  const handleDeleteAllRecordings = async () => {
+    if (!selectedUser) return;
+
+    const totalRecordings = selectedUser.recordings.length;
+
+    if (totalRecordings === 0) {
+      toast.error("No recordings found to delete");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure to delete all ${totalRecordings} recording(s) for ${selectedUser.mobile}? This will permanently remove them from DB and Cloudinary.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingAllRecordings(true);
+
+      const res = await fetch(API_ENDPOINTS.ADMIN_DELETE_USER_RECORDINGS(selectedUser._id), {
+        method: "DELETE",
+      });
+
+      const data = await readJsonSafe(res);
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to delete recordings");
+      }
+
+      toast.success(data.message || "All recordings deleted successfully");
+
+      await Promise.all([fetchUserDetails(selectedUser._id), fetchUsers()]);
+    } catch (err) {
+      console.error("DELETE ALL USER RECORDINGS ERROR:", err);
+      toast.error(err.message || "Failed to delete recordings");
+    } finally {
+      setDeletingAllRecordings(false);
     }
   };
 
@@ -573,7 +622,10 @@ export default function AddUser() {
   };
 
   const tableButtonLabel = showUsersTable ? "Hide Registered Users" : "Show Registered Users";
+  const hasAnyRecordings = (selectedUser?.recordings?.length || 0) > 0;
   const hasDownloadableRecordings = selectedUser?.recordings?.some((recording) => recording.audioLink) || false;
+  const isDeletingAnyUser = deletingUserId !== null;
+  const isDeletingSelectedUser = selectedUser ? deletingUserId === selectedUser._id : false;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 text-white">
@@ -856,7 +908,7 @@ export default function AddUser() {
         {showUsersTable && (
           <div className="mt-6 space-y-6">
             <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/60">
-              <table className="w-full min-w-[920px]">
+              <table className="w-full min-w-[1080px]">
                 <thead className="bg-gray-800/80">
                   <tr>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Name</th>
@@ -868,13 +920,14 @@ export default function AddUser() {
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Pending</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Recordings</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Last Active</th>
+                    <th className="p-3 text-left text-sm font-semibold text-gray-300">Action</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {users.length === 0 && !usersLoading && (
                     <tr>
-                      <td colSpan="9" className="p-6 text-center text-gray-400">
+                      <td colSpan="10" className="p-6 text-center text-gray-400">
                         No registered users found
                       </td>
                     </tr>
@@ -919,6 +972,33 @@ export default function AddUser() {
                       <td className="p-3 text-yellow-300">{user.pendingScripts}</td>
                       <td className="p-3 text-purple-300">{user.totalRecordings}</td>
                       <td className="p-3 text-sm text-gray-400">{formatDateTime(user.lastActiveAt)}</td>
+                      <td className="p-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteUserRecord(user);
+                          }}
+                          disabled={isDeletingAnyUser}
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                            isDeletingAnyUser
+                              ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                              : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
+                          }`}
+                        >
+                          {deletingUserId === user._id ? (
+                            <>
+                              <Loader className="h-3.5 w-3.5 animate-spin" />
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </>
+                          )}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -939,17 +1019,17 @@ export default function AddUser() {
                     <p className="mt-1 text-gray-400">{selectedUser.email}</p>
                     <p className="font-mono text-green-400">{selectedUser.mobile}</p>
                     <p className="mt-2 text-xs text-gray-500">
-                      One click se is mobile number ke saare available recordings WAV mein download ho jayenge.
+                      Is selected mobile number ke saare recordings yahin se download ya permanently delete kiye ja sakte hain.
                     </p>
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <button
                       type="button"
                       onClick={handleDownloadAllRecordings}
-                      disabled={downloadingAllRecordings || !hasDownloadableRecordings}
+                      disabled={downloadingAllRecordings || deletingAllRecordings || !hasDownloadableRecordings}
                       className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-all ${
-                        downloadingAllRecordings || !hasDownloadableRecordings
+                        downloadingAllRecordings || deletingAllRecordings || !hasDownloadableRecordings
                           ? "cursor-not-allowed bg-gray-600"
                           : "bg-blue-600 hover:bg-blue-700 active:scale-95"
                       }`}
@@ -963,6 +1043,29 @@ export default function AddUser() {
                         <>
                           <Download className="h-5 w-5" />
                           Download All WAV
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDeleteAllRecordings}
+                      disabled={deletingAllRecordings || isDeletingAnyUser || !hasAnyRecordings}
+                      className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-all ${
+                        deletingAllRecordings || isDeletingAnyUser || !hasAnyRecordings
+                          ? "cursor-not-allowed bg-gray-600"
+                          : "bg-rose-600 hover:bg-rose-700 active:scale-95"
+                      }`}
+                    >
+                      {deletingAllRecordings ? (
+                        <>
+                          <Loader className="h-5 w-5 animate-spin" />
+                          Deleting All...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-5 w-5" />
+                          Delete All Recordings
                         </>
                       )}
                     </button>
@@ -986,14 +1089,14 @@ export default function AddUser() {
                     <button
                       type="button"
                       onClick={handleDeleteUser}
-                      disabled={deletingUser}
+                      disabled={isDeletingAnyUser || deletingAllRecordings}
                       className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-all ${
-                        deletingUser
+                        isDeletingAnyUser || deletingAllRecordings
                           ? "cursor-not-allowed bg-gray-600"
                           : "bg-red-600 hover:bg-red-700 active:scale-95"
                       }`}
                     >
-                      {deletingUser ? (
+                      {isDeletingSelectedUser ? (
                         <>
                           <Loader className="h-5 w-5 animate-spin" />
                           Deleting...

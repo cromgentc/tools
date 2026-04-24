@@ -6,6 +6,7 @@ import {
   addUser,
   bulkAddUsers,
   deleteScript,
+  deleteAllUserRecordings,
   deleteUser,
   getAllScripts,
   getAllUsers,
@@ -64,6 +65,7 @@ router.get("/stats", getStats);
 router.get("/users", getAllUsers);
 router.get("/user/:id", getUserDetails);
 router.patch("/user/:id/status", updateUserStatus);
+router.delete("/user/:id/recordings", deleteAllUserRecordings);
 router.delete("/user/:id", deleteUser);
 router.get("/scripts", getAllScripts);
 router.delete("/script/:id", deleteScript);
