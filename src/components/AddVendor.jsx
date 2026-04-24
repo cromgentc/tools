@@ -7,6 +7,7 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
@@ -41,6 +42,8 @@ export default function AddVendor() {
   const [editEmail, setEditEmail] = useState("");
   const [savingVendor, setSavingVendor] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
+  const [selectedVendorUsers, setSelectedVendorUsers] = useState(null);
+  const [vendorUsersLoading, setVendorUsersLoading] = useState(false);
 
   const fetchVendors = async () => {
     try {
@@ -180,6 +183,43 @@ export default function AddVendor() {
     }
   };
 
+  const handleViewVendorUsers = async (vendor) => {
+    if (!vendor?._id) return;
+
+    try {
+      setVendorUsersLoading(true);
+      setSelectedVendorUsers({
+        vendor,
+        users: [],
+      });
+
+      const res = await fetch(
+        `${API_ENDPOINTS.ADMIN_USERS}?vendorId=${encodeURIComponent(vendor._id)}`
+      );
+      const data = await readJsonSafe(res);
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to fetch vendor users");
+      }
+
+      setSelectedVendorUsers({
+        vendor,
+        users: Array.isArray(data.users) ? data.users : [],
+      });
+    } catch (err) {
+      console.error("FETCH VENDOR USERS ERROR:", err);
+      toast.error(err.message || "Failed to fetch vendor users");
+      setSelectedVendorUsers(null);
+    } finally {
+      setVendorUsersLoading(false);
+    }
+  };
+
+  const closeVendorUsersModal = () => {
+    if (vendorUsersLoading) return;
+    setSelectedVendorUsers(null);
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 text-white">
       <div className="rounded-xl border border-gray-700 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-5 shadow-xl">
@@ -279,7 +319,15 @@ export default function AddVendor() {
                         <td className="p-3 font-mono text-sm text-cyan-300">{vendor.vendorCode}</td>
                         <td className="p-3 font-mono text-green-400">{vendor.mobile}</td>
                         <td className="p-3 text-sm text-gray-300">{vendor.email}</td>
-                        <td className="p-3 text-blue-300">{vendor.totalUsers || 0}</td>
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            onClick={() => handleViewVendorUsers(vendor)}
+                            className="rounded-md bg-cyan-900/40 px-3 py-1.5 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-800/60 hover:text-white"
+                          >
+                            {vendor.totalUsers || 0}
+                          </button>
+                        </td>
                         <td className="p-3 text-sm text-gray-400">
                           {formatDateTime(vendor.createdAt)}
                         </td>
@@ -426,6 +474,82 @@ export default function AddVendor() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {selectedVendorUsers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-5xl rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="flex items-center gap-2 text-2xl font-bold text-white">
+                  <Users className="h-6 w-6 text-cyan-400" />
+                  {selectedVendorUsers.vendor.name} Users
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  Vendor code: {selectedVendorUsers.vendor.vendorCode || "N/A"}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeVendorUsersModal}
+                disabled={vendorUsersLoading}
+                className="rounded-full bg-gray-800 p-2 text-gray-300 transition hover:bg-gray-700 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6">
+              {vendorUsersLoading && (
+                <div className="flex items-center justify-center rounded-lg border border-gray-700 bg-gray-950/60 py-12">
+                  <Loader className="h-6 w-6 animate-spin text-cyan-400" />
+                </div>
+              )}
+
+              {!vendorUsersLoading && selectedVendorUsers.users.length === 0 && (
+                <div className="rounded-lg border border-dashed border-gray-600 bg-gray-950/40 p-6 text-center text-gray-400">
+                  No users found under this vendor
+                </div>
+              )}
+
+              {!vendorUsersLoading && selectedVendorUsers.users.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-950/60">
+                  <table className="w-full min-w-[900px]">
+                    <thead className="bg-gray-800/80">
+                      <tr>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Name</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Mobile</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Email</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Scripts</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Recordings</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Created</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-300">Last Active</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {selectedVendorUsers.users.map((user) => (
+                        <tr
+                          key={user._id}
+                          className="border-t border-gray-800 transition hover:bg-gray-800/70"
+                        >
+                          <td className="p-3 font-semibold text-white">{user.name}</td>
+                          <td className="p-3 font-mono text-green-400">{user.mobile}</td>
+                          <td className="p-3 text-sm text-gray-300">{user.email}</td>
+                          <td className="p-3 text-blue-300">{user.totalScripts || 0}</td>
+                          <td className="p-3 text-purple-300">{user.totalRecordings || 0}</td>
+                          <td className="p-3 text-sm text-gray-400">{formatDateTime(user.createdAt)}</td>
+                          <td className="p-3 text-sm text-gray-400">{formatDateTime(user.lastActiveAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
