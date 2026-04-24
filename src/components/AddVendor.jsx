@@ -190,7 +190,7 @@ export default function AddVendor() {
               Vendor Management
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              Admin yahan vendor create karega. Vendor code automatic generate hoga aur vendor login bhi saath create hoga.
+              The admin will create the vendor here. A vendor code will be generated automatically, and the vendor login will also be created simultaneously.
             </p>
           </div>
 
@@ -220,7 +220,7 @@ export default function AddVendor() {
               <h3 className="text-2xl font-bold">Registered Vendors</h3>
             </div>
             <p className="text-sm text-gray-400">
-              Yahan saare registered vendors ka table aur bulk upload ka result ek jagah dikhega.
+              All registered vendors and the bulk upload results will be displayed here in a single table.
             </p>
           </div>
 

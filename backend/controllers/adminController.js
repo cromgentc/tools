@@ -1203,21 +1203,31 @@ export const deleteAllUserRecordings = async (req, res) => {
 // =========================
 export const getStats = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments({ role: { $ne: "admin" } });
-    const totalScripts = await Script.countDocuments();
-    const totalRecordings = await Recording.countDocuments();
-    
-    // Count completed recordings
-    const completedRecordings = await Recording.countDocuments({ status: "completed" });
-    
-    // Count pending scripts (scripts with status "pending")
-    const pendingScripts = await Script.countDocuments({ status: "pending" });
+    const vendorsCollection =
+      mongoose.connection?.db?.collection("vendors") || null;
+
+    const [
+      totalUsers,
+      totalVendors,
+      totalScripts,
+      totalRecordings,
+      completedRecordings,
+      pendingScripts,
+    ] = await Promise.all([
+      User.countDocuments({ role: { $nin: ["admin", "vendor"] } }),
+      vendorsCollection ? vendorsCollection.countDocuments({}) : 0,
+      Script.countDocuments(),
+      Recording.countDocuments(),
+      Recording.countDocuments({ status: "completed" }),
+      Script.countDocuments({ status: "pending" }),
+    ]);
 
     res.json({
       success: true,
       message: "Stats fetched successfully",
       data: {
         totalUsers,
+        totalVendors,
         totalScripts,
         totalRecordings,
         completedRecordings,

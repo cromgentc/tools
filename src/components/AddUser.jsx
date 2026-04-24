@@ -810,8 +810,8 @@ export default function AddUser({ accessRole = "admin" }) {
             </h2>
             <p className="mt-1 text-sm text-gray-400">
               {isVendorMode
-                ? "Apne vendor ke under new users add karo, bulk upload karo, aur neeche limited user table dekho."
-                : "Single user ya vendor create karo, bulk import karo, aur neeche registered users ka full admin view open karo."}
+                ? "Add new users under your vendor, perform bulk uploads, and view the limited user table below."
+                : "Create a single user or vendor, perform bulk import, and view the complete admin panel of registered users below.."}
             </p>
           </div>
           <div className="rounded-lg border border-blue-600/30 bg-blue-900/10 px-4 py-3 text-sm text-blue-200">
@@ -1162,8 +1162,8 @@ export default function AddUser({ accessRole = "admin" }) {
             </h3>
             <p className="mt-1 text-sm text-gray-400">
               {isVendorMode
-                ? "Yahan sirf aapke vendor ke users dikhenge with limited table columns."
-                : "Click button to open users table. Row par click karoge to full user details neeche show honge."}
+                ? "Only users under your vendor will be displayed here, with limited table columns."
+                : "Click the button to open the users table. Clicking on a row will display the full user details below."}
             </p>
           </div>
 

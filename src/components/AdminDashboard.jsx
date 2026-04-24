@@ -36,6 +36,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalScripts: 0,
     totalUsers: 0,
+    totalVendors: 0,
     totalRecordings: 0,
     completedRecordings: 0,
     pendingScripts: 0,
@@ -88,6 +89,7 @@ export default function AdminDashboard() {
         setStats({
           totalScripts: data.data?.totalScripts || 0,
           totalUsers: data.data?.totalUsers || 0,
+          totalVendors: data.data?.totalVendors || 0,
           totalRecordings: data.data?.totalRecordings || 0,
           completedRecordings: data.data?.completedRecordings || 0,
           pendingScripts: data.data?.pendingScripts || 0,
@@ -249,7 +251,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* STAT CARDS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {/* TOTAL SCRIPTS */}
                 <div className="bg-gradient-to-br from-blue-900/30 to-blue-900/10 border border-blue-600/30 p-6 rounded-xl hover:shadow-lg transition">
                   <div className="flex items-end justify-between mb-2">
@@ -280,6 +282,23 @@ export default function AdminDashboard() {
                     <div 
                       className="bg-green-500 h-full transition-all duration-500" 
                       style={{ width: `${Math.min((stats.totalUsers || 0) * 10, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* TOTAL VENDORS */}
+                <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-900/10 border border-cyan-600/30 p-6 rounded-xl hover:shadow-lg transition">
+                  <div className="flex items-end justify-between mb-2">
+                    <div>
+                      <h3 className="text-gray-400 text-xs uppercase tracking-wide mb-1">Vendor Registered</h3>
+                      <p className="text-3xl font-bold text-cyan-400">{stats.totalVendors || 0}</p>
+                    </div>
+                    <Building2 className="w-8 h-8 text-cyan-400 opacity-50" />
+                  </div>
+                  <div className="w-full bg-cyan-900/30 h-1 rounded-full overflow-hidden">
+                    <div
+                      className="bg-cyan-500 h-full transition-all duration-500"
+                      style={{ width: `${Math.min((stats.totalVendors || 0) * 10, 100)}%` }}
                     ></div>
                   </div>
                 </div>
