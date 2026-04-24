@@ -5,7 +5,7 @@ const historySchema = new mongoose.Schema({
   scriptId: String,
   audioUrl: String,
   accuracy: Number,
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
 });
 
 const userSchema = new mongoose.Schema(
@@ -70,7 +70,32 @@ const userSchema = new mongoose.Schema(
       default: "user",
     },
 
-    // 🔥 SCRIPT SYSTEM
+    vendorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
+    vendorName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    vendorCode: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    vendorKey: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
+
     accountStatus: {
       type: String,
       enum: ["active", "inactive", "suspended"],
@@ -98,30 +123,22 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // 🔥 PROGRESS TRACKING READY
     completedScripts: {
       type: Number,
       default: 0,
     },
 
-    // 🔥 RECORDING HISTORY
     history: [historySchema],
   },
   { timestamps: true }
 );
 
-/* ======================
-   PASSWORD HASH
-====================== */
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
-/* ======================
-   PASSWORD CHECK
-====================== */
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };

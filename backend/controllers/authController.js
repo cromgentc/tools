@@ -3,10 +3,6 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { serializeUserActivity, touchUserActivity } from "../utils/userActivity.js";
 import { sendPasswordResetOtp } from "../utils/passwordResetDelivery.js";
-import {
-  resolveUserRole,
-  USER_ROLE_VALIDATION_MESSAGE,
-} from "../utils/userRoles.js";
 
 const PASSWORD_RESET_OTP_WINDOW_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_SESSION_WINDOW_MS = 10 * 60 * 1000;
@@ -60,23 +56,15 @@ const clearPasswordResetState = (user) => {
 // REGISTER
 export const registerUser = async (req, res) => {
   try {
-    const { name, mobile, email, password, role } = req.body;
+    const { name, mobile, email, password } = req.body;
     const normalizedName = String(name ?? "").trim();
     const normalizedMobile = normalizeMobile(String(mobile ?? ""));
     const normalizedEmail = normalizeEmail(String(email ?? ""));
     const normalizedPassword = String(password ?? "");
-    const resolvedRole = resolveUserRole(role);
 
     // ===== VALIDATION =====
     if (!normalizedName || !normalizedMobile || !normalizedEmail || !normalizedPassword) {
       return res.status(400).json({ message: "All fields are required" });
-    }
-
-    if (!resolvedRole) {
-      return res.status(400).json({
-        success: false,
-        message: USER_ROLE_VALIDATION_MESSAGE,
-      });
     }
 
     // Mobile validation (10 digits)
@@ -113,7 +101,7 @@ export const registerUser = async (req, res) => {
       mobile: normalizedMobile,
       email: normalizedEmail,
       password: normalizedPassword,
-      role: resolvedRole,
+      role: "user",
     });
 
     res.status(201).json({
@@ -131,7 +119,7 @@ export const registerUser = async (req, res) => {
 
   } catch (err) {
     console.error("REGISTER ERROR:", err);
-    res.status(500).json({ 
+    res.status(err.statusCode || 500).json({ 
       success: false,
       message: err.message || "Failed to register" 
     });
@@ -182,6 +170,9 @@ export const loginUser = async (req, res) => {
         mobile: user.mobile,
         email: user.email,
         role: user.role,
+        vendorId: user.vendorId,
+        vendorName: user.vendorName,
+        vendorCode: user.vendorCode,
         ...serializeUserActivity(activeUser || user),
       },
       token: generateToken(user),

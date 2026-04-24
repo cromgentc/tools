@@ -3,16 +3,21 @@ import multer from "multer";
 import path from "path";
 
 import {
+  addVendor,
   addUser,
+  bulkAddVendors,
   bulkAddUsers,
   deleteScript,
   deleteAllUserRecordings,
   deleteUser,
   getAllScripts,
   getAllUsers,
+  getAllVendors,
   getStats,
   getUserDetails,
   updateUserStatus,
+  updateVendor,
+  updateUserVendor,
 } from "../controllers/adminController.js";
 
 const router = express.Router();
@@ -39,7 +44,7 @@ const upload = multer({
   },
 });
 
-const handleBulkUserUpload = (req, res, next) => {
+const handleSpreadsheetUpload = (req, res, next) => {
   upload.single("file")(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({
@@ -59,12 +64,17 @@ const handleBulkUserUpload = (req, res, next) => {
   });
 };
 
+router.post("/vendors", addVendor);
+router.get("/vendors", getAllVendors);
+router.patch("/vendor/:id", updateVendor);
+router.post("/bulk-vendors", handleSpreadsheetUpload, bulkAddVendors);
 router.post("/add-user", addUser);
-router.post("/bulk-users", handleBulkUserUpload, bulkAddUsers);
+router.post("/bulk-users", handleSpreadsheetUpload, bulkAddUsers);
 router.get("/stats", getStats);
 router.get("/users", getAllUsers);
 router.get("/user/:id", getUserDetails);
 router.patch("/user/:id/status", updateUserStatus);
+router.patch("/user/:id/vendor", updateUserVendor);
 router.delete("/user/:id/recordings", deleteAllUserRecordings);
 router.delete("/user/:id", deleteUser);
 router.get("/scripts", getAllScripts);

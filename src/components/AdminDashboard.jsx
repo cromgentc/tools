@@ -2,12 +2,33 @@ import { useState, useEffect } from "react";
 import AddScript from "./AddScript";
 import AllScripts from "./AllScripts";
 import AddUser from "./AddUser";
+import AddVendor from "./AddVendor";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { LayoutDashboard, FileText, Users, Radio, LogOut, Menu, X, AlertCircle, RefreshCw } from "lucide-react";
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  Radio,
+  LogOut,
+  Menu,
+  X,
+  AlertCircle,
+  RefreshCw,
+  Building2,
+} from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
 export default function AdminDashboard() {
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("userInfo"));
+    } catch {
+      return null;
+    }
+  })();
+  const isAdminMode = currentUser?.role === "admin";
+  const isVendorMode = currentUser?.role === "vendor";
   const [page, setPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -26,9 +47,14 @@ export default function AdminDashboard() {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("userInfo"));
 
-    if (!user || user.role !== "admin") {
-      toast.error("Access denied. Admin only.");
+    if (!user || !["admin", "vendor"].includes(user.role)) {
+      toast.error("Access denied.");
       navigate("/");
+      return;
+    }
+
+    if (user.role === "vendor") {
+      setPage("addUser");
     }
   }, [navigate]);
 
@@ -78,11 +104,13 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetchStats();
+    if (isAdminMode) {
+      fetchStats();
+    }
     checkBackend();
     const interval = setInterval(checkBackend, 5000); // Check every 5 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [isAdminMode]);
 
   // ================= LOGOUT =================
   const logout = () => {
@@ -114,15 +142,16 @@ export default function AdminDashboard() {
         <div className="p-5 text-center border-b border-gray-800">
           <h1 className="text-2xl font-bold text-blue-400 flex items-center justify-center gap-2">
             <LayoutDashboard className="w-6 h-6" />
-            Admin
+            {isVendorMode ? "Vendor" : "Admin"}
           </h1>
         </div>
 
         <div className="flex-1 p-4 space-y-2">
-          {menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
-          {menuItem("addScript", "Add Script", <FileText className="w-5 h-5" />)}
+          {isAdminMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
+          {isAdminMode && menuItem("addScript", "Add Script", <FileText className="w-5 h-5" />)}
+          {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
           {menuItem("addUser", "User Management", <Users className="w-5 h-5" />)}
-          {menuItem("all", "All Scripts", <Radio className="w-5 h-5" />)}
+          {isAdminMode && menuItem("all", "All Scripts", <Radio className="w-5 h-5" />)}
         </div>
 
         <div className="p-4 border-t border-gray-800">
@@ -165,10 +194,16 @@ export default function AdminDashboard() {
             {page === "addUser" && (
               <>
                 <Users className="w-5 h-5 text-purple-400" />
-                User Management
+                {isVendorMode ? "Vendor User Management" : "User Management"}
               </>
             )}
-            {page === "all" && (
+            {isAdminMode && page === "vendors" && (
+              <>
+                <Building2 className="w-5 h-5 text-cyan-400" />
+                Vendor Management
+              </>
+            )}
+            {isAdminMode && page === "all" && (
               <>
                 <Radio className="w-5 h-5 text-orange-400" />
                 All Scripts
@@ -183,7 +218,7 @@ export default function AdminDashboard() {
         <div className="flex-1 p-6 overflow-auto">
 
           {/* DASHBOARD */}
-          {page === "dashboard" && (
+          {isAdminMode && page === "dashboard" && (
             <div className="space-y-6">
               {/* BACKEND STATUS */}
               {backendStatus === "error" && (
@@ -406,9 +441,10 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {page === "addScript" && <AddScript />}
-          {page === "addUser" && <AddUser />}
-          {page === "all" && <AllScripts />}
+          {isAdminMode && page === "addScript" && <AddScript />}
+          {isAdminMode && page === "vendors" && <AddVendor />}
+          {page === "addUser" && <AddUser accessRole={isVendorMode ? "vendor" : "admin"} />}
+          {isAdminMode && page === "all" && <AllScripts />}
 
         </div>
       </div>

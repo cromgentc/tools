@@ -10,6 +10,7 @@ import {
   Upload,
   CheckCircle,
   AlertCircle,
+  Building2,
   FileText,
   ChevronDown,
   Trash2,
@@ -177,6 +178,7 @@ const presenceClasses = {
 
 const normalizeUserSummary = (user) => ({
   ...user,
+  vendorId: user?.vendorId ? String(user.vendorId) : "",
   totalActiveSeconds: Number(user?.totalActiveSeconds || 0),
   completedScripts: Number(user?.completedScripts || 0),
   pendingScripts: Number(user?.pendingScripts || 0),
@@ -232,17 +234,30 @@ function AudioDuration({ audioUrl }) {
   );
 }
 
-export default function AddUser() {
+export default function AddUser({ accessRole = "admin" }) {
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("userInfo"));
+    } catch {
+      return null;
+    }
+  })();
+  const isVendorMode = accessRole === "vendor";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [userRole, setUserRole] = useState("user");
+  const [vendorId, setVendorId] = useState("");
+  const [vendorNameInput, setVendorNameInput] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [excelFile, setExcelFile] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkResult, setBulkResult] = useState(initialBulkResult);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [vendors, setVendors] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
 
   const [showUsersTable, setShowUsersTable] = useState(false);
   const [users, setUsers] = useState([]);
@@ -251,22 +266,78 @@ export default function AddUser() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [vendorSaving, setVendorSaving] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [deletingAllRecordings, setDeletingAllRecordings] = useState(false);
   const [downloadingAllRecordings, setDownloadingAllRecordings] = useState(false);
+  const storedVendorId = String(currentUser?.vendorId || "").trim();
+  const storedVendorCode = String(currentUser?.vendorCode || "").trim().toLowerCase();
+  const storedVendorName = String(currentUser?.vendorName || "").trim().toLowerCase();
+  const resolvedVendorProfile =
+    isVendorMode && !storedVendorId
+      ? vendors.find((vendor) => {
+          const vendorCode = String(vendor?.vendorCode || "").trim().toLowerCase();
+          const vendorName = String(vendor?.name || "").trim().toLowerCase();
+
+          return (
+            (storedVendorCode && vendorCode === storedVendorCode) ||
+            (storedVendorName && vendorName === storedVendorName)
+          );
+        }) || null
+      : null;
+  const currentVendorId = String(storedVendorId || resolvedVendorProfile?._id || "").trim();
+  const currentVendorName = currentUser?.vendorName || resolvedVendorProfile?.name || "Linked Vendor";
+  const currentVendorCode = currentUser?.vendorCode || resolvedVendorProfile?.vendorCode || "N/A";
 
   const resetSingleForm = () => {
     setName("");
     setEmail("");
     setMobile("");
     setPassword("");
+    setUserRole("user");
+    setVendorId("");
+    setVendorNameInput("");
   };
+
+  const fetchVendors = async () => {
+    try {
+      setVendorsLoading(true);
+
+      const res = await fetch(API_ENDPOINTS.ADMIN_VENDORS);
+      const data = await readJsonSafe(res);
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to fetch vendors");
+      }
+
+      setVendors(Array.isArray(data.vendors) ? data.vendors : []);
+    } catch (err) {
+      console.error("FETCH VENDORS ERROR:", err);
+      toast.error(err.message || "Failed to load vendors");
+    } finally {
+      setVendorsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVendors();
+  }, []);
 
   const fetchUsers = async () => {
     try {
       setUsersLoading(true);
 
-      const res = await fetch(API_ENDPOINTS.ADMIN_USERS);
+      if (isVendorMode && !currentVendorId) {
+        setUsers([]);
+        return [];
+      }
+
+      const usersUrl =
+        isVendorMode && currentVendorId
+          ? `${API_ENDPOINTS.ADMIN_USERS}?vendorId=${encodeURIComponent(currentVendorId)}`
+          : API_ENDPOINTS.ADMIN_USERS;
+
+      const res = await fetch(usersUrl);
       const data = await readJsonSafe(res);
 
       if (!res.ok) {
@@ -277,8 +348,16 @@ export default function AddUser() {
         ? data.users.map(normalizeUserSummary)
         : [];
 
-      setUsers(nextUsers);
-      return nextUsers;
+      const scopedUsers =
+        isVendorMode && currentVendorId
+          ? nextUsers.filter(
+              (user) =>
+                String(user.vendorId || "") === currentVendorId && user.role !== "vendor"
+            )
+          : nextUsers.filter((user) => user.role !== "vendor");
+
+      setUsers(scopedUsers);
+      return scopedUsers;
     } catch (err) {
       console.error("FETCH USERS ERROR:", err);
       toast.error(err.message || "Failed to load users");
@@ -290,14 +369,30 @@ export default function AddUser() {
 
   const fetchUserDetails = async (userId) => {
     try {
+      if (isVendorMode && !currentVendorId) {
+        throw new Error("Vendor profile not linked to this account");
+      }
+
       setDetailLoading(true);
       setSelectedUserId(userId);
 
-      const res = await fetch(API_ENDPOINTS.ADMIN_USER_DETAILS(userId));
+      const detailsUrl =
+        isVendorMode && currentVendorId
+          ? `${API_ENDPOINTS.ADMIN_USER_DETAILS(userId)}?vendorId=${encodeURIComponent(currentVendorId)}`
+          : API_ENDPOINTS.ADMIN_USER_DETAILS(userId);
+
+      const res = await fetch(detailsUrl);
       const data = await readJsonSafe(res);
 
       if (!res.ok) {
         throw new Error(data.message || "Failed to fetch user details");
+      }
+
+      if (
+        isVendorMode &&
+        String(data.user?.vendorId || "") !== currentVendorId
+      ) {
+        throw new Error("You can only view users assigned to your vendor");
       }
 
       setSelectedUser(normalizeUserDetails(data.user));
@@ -332,6 +427,9 @@ export default function AddUser() {
       email: email.trim().toLowerCase(),
       mobile: mobile.trim(),
       password: password.trim(),
+      role: isVendorMode ? "user" : userRole,
+      vendorId: isVendorMode ? currentVendorId : userRole === "vendor" ? "" : vendorId.trim(),
+      vendorName: isVendorMode ? "" : userRole === "vendor" ? vendorNameInput.trim() : "",
     };
 
     if (!payload.name || !payload.email || !payload.mobile || !payload.password) {
@@ -348,6 +446,14 @@ export default function AddUser() {
 
     if (payload.password.length < 6) {
       return toast.error("Password must be at least 6 characters");
+    }
+
+    if (isVendorMode && !currentVendorId) {
+      return toast.error("Vendor profile not linked to this account");
+    }
+
+    if (payload.role !== "vendor" && !payload.vendorId) {
+      return toast.error("Please select a vendor");
     }
 
     try {
@@ -367,7 +473,11 @@ export default function AddUser() {
         throw new Error(data.message || "Failed to add user");
       }
 
-      toast.success(data.message || "User added successfully");
+      toast.success(
+        data.user?.vendorCode
+          ? `${data.message || "User added successfully"} (${data.user.vendorCode})`
+          : data.message || "User added successfully"
+      );
       resetSingleForm();
 
       if (showUsersTable) {
@@ -388,6 +498,15 @@ export default function AddUser() {
 
     const formData = new FormData();
     formData.append("file", excelFile);
+
+    if (isVendorMode) {
+      if (!currentVendorId) {
+        return toast.error("Vendor profile not linked to this account");
+      }
+
+      formData.append("defaultVendorId", currentVendorId);
+      formData.append("defaultRole", "user");
+    }
 
     try {
       setBulkLoading(true);
@@ -450,6 +569,7 @@ export default function AddUser() {
           ? {
               ...prev,
               ...data.user,
+              vendorId: data.user?.vendorId ? String(data.user.vendorId) : prev.vendorId || "",
             }
           : prev
       );
@@ -460,6 +580,7 @@ export default function AddUser() {
             ? {
                 ...user,
                 ...data.user,
+                vendorId: data.user?.vendorId ? String(data.user.vendorId) : user.vendorId || "",
               }
             : user
         )
@@ -469,6 +590,57 @@ export default function AddUser() {
       toast.error(err.message || "Failed to update status");
     } finally {
       setStatusSaving(false);
+    }
+  };
+
+  const handleVendorChange = async (nextVendorId) => {
+    if (!selectedUser) return;
+
+    try {
+      setVendorSaving(true);
+
+      const res = await fetch(API_ENDPOINTS.ADMIN_USER_VENDOR(selectedUser._id), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ vendorId: nextVendorId }),
+      });
+
+      const data = await readJsonSafe(res);
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to update vendor");
+      }
+
+      toast.success(data.message || "Vendor updated successfully");
+
+      setSelectedUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...data.user,
+              vendorId: data.user?.vendorId ? String(data.user.vendorId) : "",
+            }
+          : prev
+      );
+
+      setUsers((prev) =>
+        prev.map((user) =>
+          user._id === selectedUser._id
+            ? {
+                ...user,
+                ...data.user,
+                vendorId: data.user?.vendorId ? String(data.user.vendorId) : "",
+              }
+            : user
+        )
+      );
+    } catch (err) {
+      console.error("UPDATE USER VENDOR ERROR:", err);
+      toast.error(err.message || "Failed to update vendor");
+    } finally {
+      setVendorSaving(false);
     }
   };
 
@@ -634,10 +806,12 @@ export default function AddUser() {
           <div>
             <h2 className="flex items-center gap-2 text-2xl font-bold text-white">
               <Users className="h-6 w-6 text-purple-400" />
-              User Management
+              {isVendorMode ? "Vendor User Management" : "User Management"}
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              Single user create karo, bulk import karo, aur neeche registered users ka full admin view open karo.
+              {isVendorMode
+                ? "Apne vendor ke under new users add karo, bulk upload karo, aur neeche limited user table dekho."
+                : "Single user ya vendor create karo, bulk import karo, aur neeche registered users ka full admin view open karo."}
             </p>
           </div>
           <div className="rounded-lg border border-blue-600/30 bg-blue-900/10 px-4 py-3 text-sm text-blue-200">
@@ -646,6 +820,12 @@ export default function AddUser() {
             <code className="rounded bg-black/30 px-1.5 py-0.5">email</code>,{" "}
             <code className="rounded bg-black/30 px-1.5 py-0.5">mobile</code>,{" "}
             <code className="rounded bg-black/30 px-1.5 py-0.5">password</code>
+            {!isVendorMode && (
+              <>
+                , <code className="rounded bg-black/30 px-1.5 py-0.5">role</code>,{" "}
+                <code className="rounded bg-black/30 px-1.5 py-0.5">vendorName</code>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -715,11 +895,102 @@ export default function AddUser() {
               />
             </div>
 
+            {!isVendorMode && (
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-300">
+                  <Users className="h-4 w-4" />
+                  Account Role
+                </label>
+                <select
+                  value={userRole}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    setUserRole(nextRole);
+
+                    if (nextRole !== "vendor") {
+                      setVendorNameInput("");
+                    }
+
+                    if (nextRole === "vendor") {
+                      setVendorId("");
+                    }
+                  }}
+                  className="w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white outline-none transition focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="user">user</option>
+                  <option value="vendor">vendor</option>
+                </select>
+                <p className="mt-2 text-xs text-gray-400">
+                  Vendor role select karoge to vendor profile aur vendor code automatically create hoga.
+                </p>
+              </div>
+            )}
+
+            {isVendorMode && (
+              <div className="rounded-lg border border-cyan-600/20 bg-cyan-900/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Vendor Assignment</p>
+                <p className="mt-2 text-sm text-white">{currentVendorName}</p>
+                <p className="mt-1 font-mono text-sm text-cyan-200">{currentVendorCode}</p>
+                {!currentVendorId && (
+                  <p className="mt-2 text-xs text-red-300">
+                    The Vendor account is not currently linked, so other users have been hidden..
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!isVendorMode && (
+              <div>
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-300">
+                <Building2 className="h-4 w-4" />
+                {userRole === "vendor" ? "Vendor Name" : "Assign Vendor"}
+              </label>
+              {userRole === "vendor" ? (
+                <>
+                  <input
+                    placeholder="Enter vendor name or leave blank to use full name"
+                    value={vendorNameInput}
+                    onChange={(e) => setVendorNameInput(e.target.value)}
+                    className="w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="mt-2 text-xs text-gray-400">
+                    Blank chhodoge to full name se vendor profile create hoga aur vendor code generate hoga.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <select
+                    value={vendorId}
+                    onChange={(e) => setVendorId(e.target.value)}
+                    disabled={vendorsLoading || vendors.length === 0}
+                    className="w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white outline-none transition focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">
+                      {vendorsLoading
+                        ? "Loading vendors..."
+                        : vendors.length === 0
+                          ? "No vendor available"
+                          : "Select vendor"}
+                    </option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor._id} value={vendor._id}>
+                        {vendor.name} ({vendor.vendorCode})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-gray-400">
+                    User add karne se pehle vendor create karo, phir yahan dropdown se assign karo.
+                  </p>
+                </>
+              )}
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (!isVendorMode && userRole !== "vendor" && (vendorsLoading || vendors.length === 0))}
               className={`mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3 font-semibold transition-all ${
-                loading
+                loading || (!isVendorMode && userRole !== "vendor" && (vendorsLoading || vendors.length === 0))
                   ? "cursor-not-allowed bg-gray-600"
                   : "bg-blue-600 hover:bg-blue-700 active:scale-95"
               }`}
@@ -732,7 +1003,7 @@ export default function AddUser() {
               ) : (
                 <>
                   <UserPlus className="h-5 w-5" />
-                  Add User
+                  {isVendorMode ? "Add New User" : userRole === "vendor" ? "Register Vendor" : "Add User"}
                 </>
               )}
             </button>
@@ -758,13 +1029,24 @@ export default function AddUser() {
                 <code className="rounded bg-black/30 px-1.5 py-0.5">name</code>,{" "}
                 <code className="rounded bg-black/30 px-1.5 py-0.5">email</code>,{" "}
                 <code className="rounded bg-black/30 px-1.5 py-0.5">mobile</code>,{" "}
-                <code className="rounded bg-black/30 px-1.5 py-0.5">password</code>.
+                <code className="rounded bg-black/30 px-1.5 py-0.5">password</code>
+                {!isVendorMode && (
+                  <>
+                    , <code className="rounded bg-black/30 px-1.5 py-0.5">role</code>,{" "}
+                    <code className="rounded bg-black/30 px-1.5 py-0.5">vendorName</code>
+                  </>
+                )}
+                .
               </p>
             </div>
 
             <div className="rounded-lg border border-green-600/20 bg-green-900/10 p-4 text-sm text-green-200">
               <p className="font-semibold text-green-300">Template tip</p>
-              <p className="mt-2">Har row mein ek user rakho. Example: name,email,mobile,password</p>
+              <p className="mt-2">
+                {isVendorMode
+                  ? "Har row mein ek user rakho. Example: name,email,mobile,password"
+                  : "Har row mein ek user rakho. Example: name,email,mobile,password,role,vendorName"}
+              </p>
             </div>
 
             <div>
@@ -839,6 +1121,9 @@ export default function AddUser() {
                     <div>
                       <p className="font-semibold text-blue-300">{item.name}</p>
                       <p className="text-gray-400">{item.email}</p>
+                      <p className="text-xs text-cyan-300">
+                        Vendor: {item.vendorName || "Auto"} ({item.vendorCode || "Generating"})
+                      </p>
                     </div>
                     <span className="font-mono text-green-400">{item.mobile}</span>
                   </div>
@@ -876,7 +1161,9 @@ export default function AddUser() {
               Registered Users
             </h3>
             <p className="mt-1 text-sm text-gray-400">
-              Click button to open users table. Row par click karoge to full user details neeche show honge.
+              {isVendorMode
+                ? "Yahan sirf aapke vendor ke users dikhenge with limited table columns."
+                : "Click button to open users table. Row par click karoge to full user details neeche show honge."}
             </p>
           </div>
 
@@ -908,26 +1195,29 @@ export default function AddUser() {
         {showUsersTable && (
           <div className="mt-6 space-y-6">
             <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/60">
-              <table className="w-full min-w-[1080px]">
+              <table className={`w-full ${isVendorMode ? "min-w-[1120px]" : "min-w-[1320px]"}`}>
                 <thead className="bg-gray-800/80">
                   <tr>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Name</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Mobile</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Email</th>
+                    <th className="p-3 text-left text-sm font-semibold text-gray-300">Vendor Code</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Account</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Presence</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Completed</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Pending</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Recordings</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Last Active</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-300">Action</th>
+                    {!isVendorMode && (
+                      <th className="p-3 text-left text-sm font-semibold text-gray-300">Action</th>
+                    )}
                   </tr>
                 </thead>
 
                 <tbody>
                   {users.length === 0 && !usersLoading && (
                     <tr>
-                      <td colSpan="10" className="p-6 text-center text-gray-400">
+                      <td colSpan={isVendorMode ? 10 : 11} className="p-6 text-center text-gray-400">
                         No registered users found
                       </td>
                     </tr>
@@ -937,7 +1227,9 @@ export default function AddUser() {
                     <tr
                       key={user._id}
                       onClick={() => fetchUserDetails(user._id)}
-                      className={`cursor-pointer border-t border-gray-800 transition hover:bg-gray-800/70 ${
+                      className={`border-t border-gray-800 transition hover:bg-gray-800/70 ${
+                        "cursor-pointer"
+                      } ${
                         selectedUserId === user._id ? "bg-gray-800" : "bg-transparent"
                       }`}
                     >
@@ -949,6 +1241,7 @@ export default function AddUser() {
                       </td>
                       <td className="p-3 font-mono text-green-400">{user.mobile}</td>
                       <td className="p-3 text-sm text-gray-300">{user.email}</td>
+                      <td className="p-3 font-mono text-xs text-cyan-300">{user.vendorCode || "N/A"}</td>
                       <td className="p-3">
                         <span
                           className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
@@ -972,33 +1265,35 @@ export default function AddUser() {
                       <td className="p-3 text-yellow-300">{user.pendingScripts}</td>
                       <td className="p-3 text-purple-300">{user.totalRecordings}</td>
                       <td className="p-3 text-sm text-gray-400">{formatDateTime(user.lastActiveAt)}</td>
-                      <td className="p-3">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteUserRecord(user);
-                          }}
-                          disabled={isDeletingAnyUser}
-                          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                            isDeletingAnyUser
-                              ? "cursor-not-allowed bg-gray-600 text-gray-200"
-                              : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
-                          }`}
-                        >
-                          {deletingUserId === user._id ? (
-                            <>
-                              <Loader className="h-3.5 w-3.5 animate-spin" />
-                              Deleting...
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete
-                            </>
-                          )}
-                        </button>
-                      </td>
+                      {!isVendorMode && (
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteUserRecord(user);
+                            }}
+                            disabled={isDeletingAnyUser}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                              isDeletingAnyUser
+                                ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                                : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
+                            }`}
+                          >
+                            {deletingUserId === user._id ? (
+                              <>
+                                <Loader className="h-3.5 w-3.5 animate-spin" />
+                                Deleting...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -1018,12 +1313,16 @@ export default function AddUser() {
                     <h4 className="text-2xl font-bold text-white">{selectedUser.name}</h4>
                     <p className="mt-1 text-gray-400">{selectedUser.email}</p>
                     <p className="font-mono text-green-400">{selectedUser.mobile}</p>
+                    <p className="mt-2 text-sm text-cyan-300">
+                      Vendor: {selectedUser.vendorName || "Auto Vendor"} ({selectedUser.vendorCode || "N/A"})
+                    </p>
                     <p className="mt-2 text-xs text-gray-500">
                       Is selected mobile number ke saare recordings yahin se download ya permanently delete kiye ja sakte hain.
                     </p>
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  {!isVendorMode && (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <button
                       type="button"
                       onClick={handleDownloadAllRecordings}
@@ -1086,6 +1385,30 @@ export default function AddUser() {
                       </select>
                     </div>
 
+                    <div className="rounded-lg border border-gray-600 bg-gray-800 px-4 py-3">
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Change Vendor
+                      </label>
+                      <select
+                        value={selectedUser.vendorId || ""}
+                        onChange={(e) => handleVendorChange(e.target.value)}
+                        disabled={vendorSaving || vendorsLoading}
+                        className="min-w-[220px] rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                      >
+                        <option value="">
+                          {vendorsLoading ? "Loading vendors..." : "Unassigned Vendor"}
+                        </option>
+                        {vendors.map((vendor) => (
+                          <option key={vendor._id} value={vendor._id}>
+                            {vendor.name} ({vendor.vendorCode})
+                          </option>
+                        ))}
+                      </select>
+                      {vendorSaving && (
+                        <p className="mt-2 text-xs text-cyan-300">Updating vendor...</p>
+                      )}
+                    </div>
+
                     <button
                       type="button"
                       onClick={handleDeleteUser}
@@ -1108,10 +1431,11 @@ export default function AddUser() {
                         </>
                       )}
                     </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
                   <div className="rounded-lg border border-blue-600/30 bg-blue-900/10 p-4">
                     <p className="text-sm text-gray-400">Completed Scripts</p>
                     <p className="mt-2 text-2xl font-bold text-blue-300">{selectedUser.completedScripts}</p>
@@ -1131,6 +1455,13 @@ export default function AddUser() {
                     <p className="text-sm text-gray-400">Active Time In App</p>
                     <p className="mt-2 text-2xl font-bold text-green-300">
                       {formatDuration(selectedUser.totalActiveSeconds)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-cyan-600/30 bg-cyan-900/10 p-4">
+                    <p className="text-sm text-gray-400">Vendor Code</p>
+                    <p className="mt-2 break-all font-mono text-xl font-bold text-cyan-300">
+                      {selectedUser.vendorCode || "N/A"}
                     </p>
                   </div>
                 </div>

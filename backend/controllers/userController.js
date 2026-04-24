@@ -5,6 +5,11 @@ import {
   resolveUserRole,
   USER_ROLE_VALIDATION_MESSAGE,
 } from "../utils/userRoles.js";
+import {
+  buildVendorProfile,
+  buildVendorSnapshot,
+  resolveVendorAssignment,
+} from "../utils/vendor.js";
 
 const normalizeEmail = (value = "") => String(value ?? "").trim().toLowerCase();
 const normalizeMobile = (value = "") => String(value ?? "").trim();
@@ -49,6 +54,9 @@ export const loginUser = async (req, res) => {
         mobile: user.mobile,
         email: user.email,
         role: user.role,
+        vendorId: user.vendorId,
+        vendorName: user.vendorName,
+        vendorCode: user.vendorCode,
         ...serializeUserActivity(activeUser || user),
       },
     });
@@ -145,12 +153,16 @@ export const completeScript = async (req, res) => {
 // =========================
 export const addUser = async (req, res) => {
   try {
-    const { name, mobile, email, password, role } = req.body;
+    const { name, mobile, email, password, role, vendorName } = req.body;
     const normalizedName = String(name ?? "").trim();
     const normalizedMobile = normalizeMobile(mobile);
     const normalizedEmail = normalizeEmail(email);
     const normalizedPassword = String(password ?? "");
     const resolvedRole = resolveUserRole(role);
+    const effectiveVendorName =
+      resolvedRole === "vendor"
+        ? String(vendorName ?? "").trim() || normalizedName
+        : String(vendorName ?? "").trim();
 
     // ===== VALIDATION =====
     if (!normalizedName || !normalizedMobile || !normalizedEmail || !normalizedPassword) {
@@ -187,6 +199,48 @@ export const addUser = async (req, res) => {
       });
     }
 
+    if (resolvedRole === "vendor") {
+      const vendorProfile = buildVendorProfile({
+        vendorName: effectiveVendorName || normalizedName,
+      });
+      const user = new User({
+        name: vendorProfile.name,
+        mobile: normalizedMobile,
+        email: normalizedEmail,
+        password: normalizedPassword,
+        role: "vendor",
+        vendorName: vendorProfile.name,
+        vendorCode: vendorProfile.vendorCode,
+        vendorKey: vendorProfile.vendorKey,
+      });
+
+      user.vendorId = user._id;
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: "User created successfully",
+        user: {
+          _id: user._id,
+          name: user.name,
+          mobile: user.mobile,
+          email: user.email,
+          role: user.role,
+          vendorId: user.vendorId,
+          vendorName: user.vendorName,
+          vendorCode: user.vendorCode,
+        },
+      });
+    }
+
+    const vendorProfile = await resolveVendorAssignment({
+      vendorId: req.body?.vendorId,
+      vendorName: effectiveVendorName,
+      vendorCode: req.body?.vendorCode,
+    }).catch((error) => {
+      throw Object.assign(new Error(error.message), { statusCode: 400 });
+    });
+
     // Create user
     const user = await User.create({
       name: normalizedName,
@@ -194,6 +248,7 @@ export const addUser = async (req, res) => {
       email: normalizedEmail,
       password: normalizedPassword,
       role: resolvedRole,
+      ...buildVendorSnapshot(vendorProfile),
     });
 
     res.json({
@@ -205,12 +260,15 @@ export const addUser = async (req, res) => {
         mobile: user.mobile,
         email: user.email,
         role: user.role,
+        vendorId: user.vendorId,
+        vendorName: user.vendorName,
+        vendorCode: user.vendorCode,
       },
     });
 
   } catch (err) {
     console.error("ADD USER ERROR:", err);
-    res.status(500).json({ 
+    res.status(err.statusCode || 500).json({ 
       success: false,
       message: err.message || "Failed to create user" 
     });

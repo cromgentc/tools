@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 
 import connectDB from "./config/db.js";
+import { syncVendorUserReferences } from "./utils/vendor.js";
 
 // routes
 import recordingRoutes from "./routes/recordingRoutes.js";
@@ -112,6 +113,16 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     await connectDB();
+    const vendorSyncResult = await syncVendorUserReferences();
+
+    if (
+      vendorSyncResult.vendorUsersUpdated > 0 ||
+      vendorSyncResult.assignedUsersUpdated > 0
+    ) {
+      console.log(
+        `Vendor sync complete: ${vendorSyncResult.vendorUsersUpdated} vendor accounts updated, ${vendorSyncResult.assignedUsersUpdated} user assignments repaired`
+      );
+    }
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);

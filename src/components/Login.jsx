@@ -40,7 +40,6 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
-  const [registerRole, setRegisterRole] = useState("");
   const [showPass, setShowPass] = useState(false);
 
   const [resetMethod, setResetMethod] = useState("email");
@@ -113,7 +112,9 @@ export default function Auth() {
         if (user?._id && user?.role) {
           user.role === "admin"
             ? navigate("/admin-dashboard", { replace: true })
-            : navigate("/recording", { replace: true });
+            : user.role === "vendor"
+              ? navigate("/vendor-dashboard", { replace: true })
+              : navigate("/recording", { replace: true });
         }
       }
     } catch (err) {
@@ -179,7 +180,9 @@ export default function Auth() {
 
       userData.role === "admin"
         ? navigate("/admin-dashboard", { replace: true })
-        : navigate("/recording", { replace: true });
+        : userData.role === "vendor"
+          ? navigate("/vendor-dashboard", { replace: true })
+          : navigate("/recording", { replace: true });
     } catch (err) {
       console.error("Login error:", err);
       toast.error(err.message || "Login failed");
@@ -221,7 +224,6 @@ export default function Auth() {
           email: normalizedEmail,
           mobile: normalizedMobile,
           password,
-          role: registerRole || undefined,
         }),
       });
 
@@ -237,7 +239,6 @@ export default function Auth() {
       setEmail("");
       setMobile(normalizedMobile);
       setPassword("");
-      setRegisterRole("");
       setShowPass(false);
     } catch (err) {
       console.error("Register error:", err);
@@ -488,24 +489,9 @@ export default function Auth() {
                   />
                 </div>
 
-                {/* <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Account Role
-                  </label>
-                  <select
-                    value={registerRole}
-                    onChange={(e) => setRegisterRole(e.target.value)}
-                    className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Default User</option>
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                    <option value="vendor">Vendor</option>
-                  </select>
-                  <p className="mt-2 text-xs text-gray-400">
-                    Blank chhodoge to account automatically user role se register hoga.
-                  </p>
-                </div> */}
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-200">
+                 Only user accounts can be created through public registration. Vendor accounts will be created from the admin dashboard.
+                </div>
               </>
             )}
 

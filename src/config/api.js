@@ -25,8 +25,12 @@ export const API_ENDPOINTS = {
   // Admin endpoints
   ADMIN_SCRIPTS: `${API_BASE_URL}/api/admin/scripts`,
   ADMIN_USERS: `${API_BASE_URL}/api/admin/users`,
+  ADMIN_VENDORS: `${API_BASE_URL}/api/admin/vendors`,
+  ADMIN_UPDATE_VENDOR: (id) => `${API_BASE_URL}/api/admin/vendor/${id}`,
+  ADMIN_BULK_ADD_VENDORS: `${API_BASE_URL}/api/admin/bulk-vendors`,
   ADMIN_USER_DETAILS: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_USER_STATUS: (id) => `${API_BASE_URL}/api/admin/user/${id}/status`,
+  ADMIN_USER_VENDOR: (id) => `${API_BASE_URL}/api/admin/user/${id}/vendor`,
   ADMIN_DELETE_USER_RECORDINGS: (id) => `${API_BASE_URL}/api/admin/user/${id}/recordings`,
   ADMIN_DELETE_USER: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_DELETE_SCRIPT: (id) => `${API_BASE_URL}/api/admin/script/${id}`,
