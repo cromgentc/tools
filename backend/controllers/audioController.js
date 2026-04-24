@@ -2,12 +2,34 @@ import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath || "ffmpeg";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const resolveBinaryPath = (configuredPath, fallbackCommand) => {
+  const normalizedPath = String(configuredPath || "").trim();
+
+  if (!normalizedPath) {
+    return fallbackCommand;
+  }
+
+  if (fs.existsSync(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  return fallbackCommand;
+};
+
+const resolvedFfmpegPath = resolveBinaryPath(
+  process.env.FFMPEG_PATH || ffmpegPath,
+  "ffmpeg"
+);
+
 ffmpeg.setFfmpegPath(resolvedFfmpegPath);
 
 const ALLOWED_FORMATS = new Set(["mp3", "wav"]);
-const UPLOADS_DIR = "uploads";
+const UPLOADS_DIR = path.resolve(__dirname, "../uploads");
 
 const safeUnlink = (filePath) => {
   if (!filePath) return;
