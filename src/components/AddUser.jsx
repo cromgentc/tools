@@ -69,35 +69,39 @@ const getRecordingDownloadName = (recording, mobile, index = 0, format = "wav") 
   )}.${format}`;
 };
 
+const convertAudioToBlob = async ({ audioUrl, format = "wav" }) => {
+  if (!audioUrl) {
+    throw new Error("Audio not available");
+  }
+
+  const sourceRes = await fetch(audioUrl);
+
+  if (!sourceRes.ok) {
+    throw new Error("Audio file not found");
+  }
+
+  const blob = await sourceRes.blob();
+  const formData = new FormData();
+
+  formData.append("file", blob, "audio.webm");
+  formData.append("format", format);
+
+  const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await readJsonSafe(response);
+    throw new Error(errorData.message || errorData.error || "Conversion failed");
+  }
+
+  return response.blob();
+};
+
 const convertAndDownload = async ({ audioUrl, format = "wav", fileName, silent = false }) => {
   try {
-    if (!audioUrl) {
-      throw new Error("Audio not available");
-    }
-
-    const sourceRes = await fetch(audioUrl);
-
-    if (!sourceRes.ok) {
-      throw new Error("Audio file not found");
-    }
-
-    const blob = await sourceRes.blob();
-    const formData = new FormData();
-
-    formData.append("file", blob, "audio.webm");
-    formData.append("format", format);
-
-    const response = await fetch(API_ENDPOINTS.AUDIO_CONVERT, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await readJsonSafe(response);
-      throw new Error(errorData.message || errorData.error || "Conversion failed");
-    }
-
-    const convertedBlob = await response.blob();
+    const convertedBlob = await convertAudioToBlob({ audioUrl, format });
     triggerBrowserDownload(convertedBlob, fileName || `recording-${Date.now()}.${format}`);
 
     if (!silent) {
@@ -119,6 +123,13 @@ const convertAndDownload = async ({ audioUrl, format = "wav", fileName, silent =
       error: err,
     };
   }
+};
+
+const saveBlobToDirectory = async (directoryHandle, blob, fileName) => {
+  const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(blob);
+  await writable.close();
 };
 
 const formatDuration = (value) => {
@@ -749,26 +760,50 @@ export default function AddUser({ accessRole = "admin" }) {
       setDownloadingAllRecordings(true);
 
       const failedDownloads = [];
+      let directoryHandle = null;
+
+      if (typeof window !== "undefined" && typeof window.showDirectoryPicker === "function") {
+        try {
+          directoryHandle = await window.showDirectoryPicker({
+            mode: "readwrite",
+          });
+        } catch (pickerError) {
+          if (pickerError?.name === "AbortError") {
+            toast.dismiss(loadingToast);
+            return;
+          }
+        }
+      }
 
       for (const [index, recording] of downloadableRecordings.entries()) {
-        const result = await convertAndDownload({
-          audioUrl: recording.audioLink,
-          format: "wav",
-          fileName: getRecordingDownloadName(recording, selectedUser.mobile, index, "wav"),
-          silent: true,
-        });
+        const fileName = getRecordingDownloadName(recording, selectedUser.mobile, index, "wav");
 
-        if (!result.success) {
+        try {
+          const convertedBlob = await convertAudioToBlob({
+            audioUrl: recording.audioLink,
+            format: "wav",
+          });
+
+          if (directoryHandle) {
+            await saveBlobToDirectory(directoryHandle, convertedBlob, fileName);
+          } else {
+            triggerBrowserDownload(convertedBlob, fileName);
+            await new Promise((resolve) => window.setTimeout(resolve, 400));
+          }
+        } catch (downloadError) {
+          console.error("DOWNLOAD ALL ITEM ERROR:", downloadError);
           failedDownloads.push(getRecordingDisplayName(recording, index));
         }
-
-        await new Promise((resolve) => window.setTimeout(resolve, 250));
       }
 
       toast.dismiss(loadingToast);
 
       if (failedDownloads.length === 0) {
-        toast.success(`Downloaded all ${downloadableRecordings.length} recording(s)`);
+        toast.success(
+          directoryHandle
+            ? `Saved all ${downloadableRecordings.length} recording(s) to selected folder`
+            : `Downloaded all ${downloadableRecordings.length} recording(s)`
+        );
         return;
       }
 
