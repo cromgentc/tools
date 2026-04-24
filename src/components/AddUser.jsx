@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import {
   User,
@@ -47,7 +47,28 @@ const triggerBrowserDownload = (blob, fileName) => {
   window.URL.revokeObjectURL(blobUrl);
 };
 
-const convertAndDownload = async ({ audioUrl, format = "wav" }) => {
+const sanitizeFileNamePart = (value) => {
+  const safeValue = String(value || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return safeValue || "recording";
+};
+
+const getRecordingDisplayName = (recording, index = 0) => recording?.filename || `recording-${index + 1}`;
+
+const getRecordingDownloadName = (recording, mobile, index = 0, format = "wav") => {
+  const baseName = getRecordingDisplayName(recording, index).replace(/\.[^./\\]+$/, "");
+
+  return `${sanitizeFileNamePart(mobile)}-${sanitizeFileNamePart(baseName)}-${sanitizeFileNamePart(
+    recording?._id || `recording-${index + 1}`
+  )}.${format}`;
+};
+
+const convertAndDownload = async ({ audioUrl, format = "wav", fileName, silent = false }) => {
   try {
     if (!audioUrl) {
       throw new Error("Audio not available");
@@ -76,11 +97,26 @@ const convertAndDownload = async ({ audioUrl, format = "wav" }) => {
     }
 
     const convertedBlob = await response.blob();
-    triggerBrowserDownload(convertedBlob, `recording-${Date.now()}.${format}`);
-    toast.success(`${format.toUpperCase()} downloaded`);
+    triggerBrowserDownload(convertedBlob, fileName || `recording-${Date.now()}.${format}`);
+
+    if (!silent) {
+      toast.success(`${format.toUpperCase()} downloaded`);
+    }
+
+    return {
+      success: true,
+    };
   } catch (err) {
     console.error("DOWNLOAD AUDIO ERROR:", err);
-    toast.error(err.message || "Download failed");
+
+    if (!silent) {
+      toast.error(err.message || "Download failed");
+    }
+
+    return {
+      success: false,
+      error: err,
+    };
   }
 };
 
@@ -111,6 +147,15 @@ const formatDateTime = (value) => {
   }
 
   return date.toLocaleString();
+};
+
+const formatAudioDuration = (value) => {
+  const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+
+  return `${hours}:${minutes}:${seconds}`;
 };
 
 const truncateText = (value, max = 120) => {
@@ -149,6 +194,44 @@ const normalizeUserDetails = (user) => ({
   scripts: Array.isArray(user?.scripts) ? user.scripts : [],
 });
 
+function AudioDuration({ audioUrl }) {
+  const [duration, setDuration] = useState(null);
+
+  useEffect(() => {
+    if (!audioUrl) {
+      setDuration(null);
+      return undefined;
+    }
+
+    const audio = document.createElement("audio");
+
+    const handleLoadedMetadata = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+
+    const handleError = () => {
+      setDuration(0);
+    };
+
+    audio.preload = "metadata";
+    audio.src = audioUrl;
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("error", handleError);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("error", handleError);
+      audio.src = "";
+    };
+  }, [audioUrl]);
+
+  return (
+    <p className="mt-2 text-xs font-mono text-gray-400">
+      Duration: {duration === null ? "00:00:00" : formatAudioDuration(duration)}
+    </p>
+  );
+}
+
 export default function AddUser() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -169,6 +252,7 @@ export default function AddUser() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
+  const [downloadingAllRecordings, setDownloadingAllRecordings] = useState(false);
 
   const resetSingleForm = () => {
     setName("");
@@ -426,7 +510,70 @@ export default function AddUser() {
     }
   };
 
+  const handleDownloadAllRecordings = async () => {
+    if (!selectedUser) return;
+
+    const downloadableRecordings = selectedUser.recordings.filter((recording) => recording.audioLink);
+
+    if (downloadableRecordings.length === 0) {
+      toast.error("No recordings available to download");
+      return;
+    }
+
+    const loadingToast = toast.loading(
+      `Downloading ${downloadableRecordings.length} recording(s) for ${selectedUser.mobile}...`
+    );
+
+    try {
+      setDownloadingAllRecordings(true);
+
+      const failedDownloads = [];
+
+      for (const [index, recording] of downloadableRecordings.entries()) {
+        const result = await convertAndDownload({
+          audioUrl: recording.audioLink,
+          format: "wav",
+          fileName: getRecordingDownloadName(recording, selectedUser.mobile, index, "wav"),
+          silent: true,
+        });
+
+        if (!result.success) {
+          failedDownloads.push(getRecordingDisplayName(recording, index));
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
+
+      toast.dismiss(loadingToast);
+
+      if (failedDownloads.length === 0) {
+        toast.success(`Downloaded all ${downloadableRecordings.length} recording(s)`);
+        return;
+      }
+
+      const downloadedCount = downloadableRecordings.length - failedDownloads.length;
+      const failedPreview = failedDownloads.slice(0, 2).join(", ");
+      const failedSuffix = failedDownloads.length > 2 ? "..." : "";
+
+      if (downloadedCount > 0) {
+        toast.error(
+          `Downloaded ${downloadedCount}/${downloadableRecordings.length}. Failed: ${failedPreview}${failedSuffix}`
+        );
+        return;
+      }
+
+      toast.error(`All downloads failed: ${failedPreview}${failedSuffix}`);
+    } catch (err) {
+      console.error("DOWNLOAD ALL USER RECORDINGS ERROR:", err);
+      toast.dismiss(loadingToast);
+      toast.error(err.message || "Bulk download failed");
+    } finally {
+      setDownloadingAllRecordings(false);
+    }
+  };
+
   const tableButtonLabel = showUsersTable ? "Hide Registered Users" : "Show Registered Users";
+  const hasDownloadableRecordings = selectedUser?.recordings?.some((recording) => recording.audioLink) || false;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 text-white">
@@ -791,9 +938,35 @@ export default function AddUser() {
                     <h4 className="text-2xl font-bold text-white">{selectedUser.name}</h4>
                     <p className="mt-1 text-gray-400">{selectedUser.email}</p>
                     <p className="font-mono text-green-400">{selectedUser.mobile}</p>
+                    <p className="mt-2 text-xs text-gray-500">
+                      One click se is mobile number ke saare available recordings WAV mein download ho jayenge.
+                    </p>
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleDownloadAllRecordings}
+                      disabled={downloadingAllRecordings || !hasDownloadableRecordings}
+                      className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-all ${
+                        downloadingAllRecordings || !hasDownloadableRecordings
+                          ? "cursor-not-allowed bg-gray-600"
+                          : "bg-blue-600 hover:bg-blue-700 active:scale-95"
+                      }`}
+                    >
+                      {downloadingAllRecordings ? (
+                        <>
+                          <Loader className="h-5 w-5 animate-spin" />
+                          Downloading All...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-5 w-5" />
+                          Download All WAV
+                        </>
+                      )}
+                    </button>
+
                     <div className="rounded-lg border border-gray-600 bg-gray-800 px-4 py-3">
                       <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                         Account Status
@@ -904,7 +1077,7 @@ export default function AddUser() {
                         <p className="text-sm text-gray-400">No recordings found for this user.</p>
                       )}
 
-                      {selectedUser.recordings.map((recording) => (
+                      {selectedUser.recordings.map((recording, index) => (
                         <div
                           key={recording._id}
                           className="rounded-lg border border-gray-700 bg-gray-800/70 p-4"
@@ -915,6 +1088,22 @@ export default function AddUser() {
                           <p className="mt-2 text-sm text-gray-300">
                             {truncateText(recording.script?.content || "No linked script")}
                           </p>
+
+                          <AudioDuration audioUrl={recording.audioLink} />
+
+                          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div className="rounded-lg border border-cyan-600/20 bg-cyan-900/10 p-3">
+                              <p className="text-xs uppercase tracking-wide text-cyan-300">Recording Name</p>
+                              <p className="mt-1 break-all font-mono text-sm text-white">
+                                {getRecordingDisplayName(recording, index)}
+                              </p>
+                            </div>
+
+                            <div className="rounded-lg border border-amber-600/20 bg-amber-900/10 p-3">
+                              <p className="text-xs uppercase tracking-wide text-amber-300">Recording ID</p>
+                              <p className="mt-1 break-all font-mono text-sm text-white">{recording._id}</p>
+                            </div>
+                          </div>
 
                           {recording.audioLink ? (
                             <>
@@ -928,6 +1117,12 @@ export default function AddUser() {
                                   convertAndDownload({
                                     audioUrl: recording.audioLink,
                                     format: "wav",
+                                    fileName: getRecordingDownloadName(
+                                      recording,
+                                      selectedUser.mobile,
+                                      index,
+                                      "wav"
+                                    ),
                                   })
                                 }
                                 className="mt-3 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-700"
@@ -955,31 +1150,63 @@ export default function AddUser() {
                         <p className="text-sm text-gray-400">No scripts assigned to this user.</p>
                       )}
 
-                      {selectedUser.scripts.map((script) => (
-                        <div
-                          key={script._id}
-                          className="rounded-lg border border-gray-700 bg-gray-800/70 p-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <p className="text-sm text-gray-300">{truncateText(script.content)}</p>
-                            <span
-                              className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-                                script.status === "completed"
-                                  ? "border-green-600/40 bg-green-600/20 text-green-300"
-                                  : "border-yellow-600/40 bg-yellow-600/20 text-yellow-300"
-                              }`}
-                            >
-                              {script.status}
-                            </span>
+                      {selectedUser.scripts.map((script) => {
+                        const linkedRecordings = selectedUser.recordings.filter(
+                          (recording) => recording.script?._id === script._id
+                        );
+
+                        return (
+                          <div
+                            key={script._id}
+                            className="rounded-lg border border-gray-700 bg-gray-800/70 p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm text-gray-300">{truncateText(script.content)}</p>
+                              <span
+                                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                                  script.status === "completed"
+                                    ? "border-green-600/40 bg-green-600/20 text-green-300"
+                                    : "border-yellow-600/40 bg-yellow-600/20 text-yellow-300"
+                                }`}
+                              >
+                                {script.status}
+                              </span>
+                            </div>
+                            <p className="mt-3 text-xs text-gray-500">
+                              Created: {formatDateTime(script.createdAt)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              Completed: {formatDateTime(script.completedAt)}
+                            </p>
+
+                            {linkedRecordings.length > 0 ? (
+                              <div className="mt-3 space-y-2 rounded-lg border border-cyan-600/20 bg-cyan-900/10 p-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                                  Linked Recordings
+                                </p>
+
+                                {linkedRecordings.map((recording, index) => (
+                                  <div
+                                    key={recording._id}
+                                    className="rounded-md border border-gray-700 bg-gray-900/50 p-3"
+                                  >
+                                    <p className="text-xs text-gray-400">Recording Name</p>
+                                    <p className="break-all font-mono text-sm text-white">
+                                      {getRecordingDisplayName(recording, index)}
+                                    </p>
+                                    <p className="mt-2 text-xs text-gray-400">Recording ID</p>
+                                    <p className="break-all font-mono text-xs text-cyan-200">
+                                      {recording._id}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-xs text-gray-500">Recording not uploaded yet.</p>
+                            )}
                           </div>
-                          <p className="mt-3 text-xs text-gray-500">
-                            Created: {formatDateTime(script.createdAt)}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            Completed: {formatDateTime(script.completedAt)}
-                          </p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

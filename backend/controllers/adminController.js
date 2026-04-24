@@ -314,6 +314,7 @@ export const getUserDetails = async (req, res) => {
         })),
         recordings: recordings.map((recording) => ({
           _id: recording._id,
+          filename: recording.filename,
           audioLink: recording.audioLink,
           fileSize: recording.fileSize || 0,
           uploadedAt: recording.uploadedAt,
