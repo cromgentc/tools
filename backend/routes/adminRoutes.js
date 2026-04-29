@@ -15,6 +15,7 @@ import {
   getAllVendors,
   getStats,
   getUserDetails,
+  downloadAllUserRecordings,
   updateUserStatus,
   updateVendor,
   updateUserVendor,
@@ -72,6 +73,7 @@ router.post("/add-user", addUser);
 router.post("/bulk-users", handleSpreadsheetUpload, bulkAddUsers);
 router.get("/stats", getStats);
 router.get("/users", getAllUsers);
+router.get("/user/:id/recordings/download", downloadAllUserRecordings);
 router.get("/user/:id", getUserDetails);
 router.patch("/user/:id/status", updateUserStatus);
 router.patch("/user/:id/vendor", updateUserVendor);

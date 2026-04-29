@@ -1,6 +1,4 @@
-const DEFAULT_API_BASE_URL = import.meta.env.DEV
-  ? "http://localhost:5000"
-  : "https://recording-tools.onrender.com";
+const DEFAULT_API_BASE_URL = "https://recording-tools.onrender.com";
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_URL || DEFAULT_API_BASE_URL
@@ -32,6 +30,7 @@ export const API_ENDPOINTS = {
   ADMIN_USER_STATUS: (id) => `${API_BASE_URL}/api/admin/user/${id}/status`,
   ADMIN_USER_VENDOR: (id) => `${API_BASE_URL}/api/admin/user/${id}/vendor`,
   ADMIN_DELETE_USER_RECORDINGS: (id) => `${API_BASE_URL}/api/admin/user/${id}/recordings`,
+  ADMIN_DOWNLOAD_USER_RECORDINGS: (id) => `${API_BASE_URL}/api/admin/user/${id}/recordings/download`,
   ADMIN_DELETE_USER: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_DELETE_SCRIPT: (id) => `${API_BASE_URL}/api/admin/script/${id}`,
   ADMIN_ADD_USER: `${API_BASE_URL}/api/admin/add-user`,

@@ -48,6 +48,123 @@ const triggerBrowserDownload = (blob, fileName) => {
   window.URL.revokeObjectURL(blobUrl);
 };
 
+const crcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+
+  return value >>> 0;
+});
+
+const getCrc32 = (bytes) => {
+  let crc = 0xffffffff;
+
+  for (const byte of bytes) {
+    crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+const writeUint16 = (view, offset, value) => view.setUint16(offset, value, true);
+const writeUint32 = (view, offset, value) => view.setUint32(offset, value, true);
+
+const getDosDateTime = (date = new Date()) => {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime =
+    (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+
+  return { dosDate, dosTime };
+};
+
+const createZipBlob = async (files) => {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  const { dosDate, dosTime } = getDosDateTime();
+  let offset = 0;
+
+  for (const file of files) {
+    const data = new Uint8Array(await file.blob.arrayBuffer());
+    const nameBytes = encoder.encode(file.name);
+    const crc = getCrc32(data);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    writeUint32(localView, 0, 0x04034b50);
+    writeUint16(localView, 4, 20);
+    writeUint16(localView, 6, 0x0800);
+    writeUint16(localView, 8, 0);
+    writeUint16(localView, 10, dosTime);
+    writeUint16(localView, 12, dosDate);
+    writeUint32(localView, 14, crc);
+    writeUint32(localView, 18, data.length);
+    writeUint32(localView, 22, data.length);
+    writeUint16(localView, 26, nameBytes.length);
+    writeUint16(localView, 28, 0);
+    localHeader.set(nameBytes, 30);
+
+    localParts.push(localHeader, data);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    writeUint32(centralView, 0, 0x02014b50);
+    writeUint16(centralView, 4, 20);
+    writeUint16(centralView, 6, 20);
+    writeUint16(centralView, 8, 0x0800);
+    writeUint16(centralView, 10, 0);
+    writeUint16(centralView, 12, dosTime);
+    writeUint16(centralView, 14, dosDate);
+    writeUint32(centralView, 16, crc);
+    writeUint32(centralView, 20, data.length);
+    writeUint32(centralView, 24, data.length);
+    writeUint16(centralView, 28, nameBytes.length);
+    writeUint16(centralView, 30, 0);
+    writeUint16(centralView, 32, 0);
+    writeUint16(centralView, 34, 0);
+    writeUint16(centralView, 36, 0);
+    writeUint32(centralView, 38, 0);
+    writeUint32(centralView, 42, offset);
+    centralHeader.set(nameBytes, 46);
+
+    centralParts.push(centralHeader);
+    offset += localHeader.length + data.length;
+  }
+
+  const centralDirectorySize = centralParts.reduce((total, part) => total + part.length, 0);
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  writeUint32(endView, 0, 0x06054b50);
+  writeUint16(endView, 4, 0);
+  writeUint16(endView, 6, 0);
+  writeUint16(endView, 8, files.length);
+  writeUint16(endView, 10, files.length);
+  writeUint32(endView, 12, centralDirectorySize);
+  writeUint32(endView, 16, offset);
+  writeUint16(endView, 20, 0);
+
+  return new Blob([...localParts, ...centralParts, endRecord], { type: "application/zip" });
+};
+
+const runWithConcurrency = async (items, limit, worker) => {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
+};
+
 const sanitizeFileNamePart = (value) => {
   const safeValue = String(value || "")
     .trim()
@@ -125,11 +242,47 @@ const convertAndDownload = async ({ audioUrl, format = "wav", fileName, silent =
   }
 };
 
-const saveBlobToDirectory = async (directoryHandle, blob, fileName) => {
-  const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(blob);
-  await writable.close();
+const downloadRecordingsZipInBrowser = async (recordings, mobile) => {
+  const results = await runWithConcurrency(recordings, 5, async (recording, index) => {
+    try {
+      const response = await fetch(recording.audioLink);
+
+      if (!response.ok) {
+        throw new Error("Audio file not found");
+      }
+
+      const blob = await response.blob();
+
+      return {
+        fileName: getRecordingDownloadName(recording, mobile, index, "wav"),
+        blob,
+      };
+    } catch (err) {
+      console.error("DOWNLOAD ZIP FALLBACK ITEM ERROR:", err);
+      return {
+        fileName: getRecordingDisplayName(recording, index),
+        error: err,
+      };
+    }
+  });
+
+  const files = results.filter((result) => result?.blob);
+  const failedCount = results.filter((result) => result?.error).length;
+
+  if (files.length === 0) {
+    throw new Error("Audio files could not be downloaded");
+  }
+
+  const zipBlob = await createZipBlob(files.map((file) => ({
+    name: file.fileName,
+    blob: file.blob,
+  })));
+
+  return {
+    zipBlob,
+    downloadedCount: files.length,
+    failedCount,
+  };
 };
 
 const formatDuration = (value) => {
@@ -759,66 +912,40 @@ export default function AddUser({ accessRole = "admin" }) {
     try {
       setDownloadingAllRecordings(true);
 
-      const failedDownloads = [];
-      let directoryHandle = null;
+      const response = await fetch(API_ENDPOINTS.ADMIN_DOWNLOAD_USER_RECORDINGS(selectedUser._id));
+      let zipBlob = null;
+      let downloadedCount = downloadableRecordings.length;
+      let failedCount = 0;
 
-      if (typeof window !== "undefined" && typeof window.showDirectoryPicker === "function") {
-        try {
-          directoryHandle = await window.showDirectoryPicker({
-            mode: "readwrite",
-          });
-        } catch (pickerError) {
-          if (pickerError?.name === "AbortError") {
-            toast.dismiss(loadingToast);
-            return;
-          }
-        }
+      if (response.status === 404) {
+        const fallbackResult = await downloadRecordingsZipInBrowser(
+          downloadableRecordings,
+          selectedUser.mobile
+        );
+        zipBlob = fallbackResult.zipBlob;
+        downloadedCount = fallbackResult.downloadedCount;
+        failedCount = fallbackResult.failedCount;
+      } else if (!response.ok) {
+        const errorData = await readJsonSafe(response);
+        throw new Error(errorData.message || "Bulk download failed");
+      } else {
+        zipBlob = await response.blob();
+        downloadedCount =
+          Number(response.headers.get("X-Downloaded-Recordings")) || downloadableRecordings.length;
+        failedCount = Number(response.headers.get("X-Failed-Recordings")) || 0;
       }
 
-      for (const [index, recording] of downloadableRecordings.entries()) {
-        const fileName = getRecordingDownloadName(recording, selectedUser.mobile, index, "wav");
+      const zipName = `${sanitizeFileNamePart(selectedUser.mobile)}-recordings-wav.zip`;
 
-        try {
-          const convertedBlob = await convertAudioToBlob({
-            audioUrl: recording.audioLink,
-            format: "wav",
-          });
-
-          if (directoryHandle) {
-            await saveBlobToDirectory(directoryHandle, convertedBlob, fileName);
-          } else {
-            triggerBrowserDownload(convertedBlob, fileName);
-            await new Promise((resolve) => window.setTimeout(resolve, 400));
-          }
-        } catch (downloadError) {
-          console.error("DOWNLOAD ALL ITEM ERROR:", downloadError);
-          failedDownloads.push(getRecordingDisplayName(recording, index));
-        }
-      }
-
+      triggerBrowserDownload(zipBlob, zipName);
       toast.dismiss(loadingToast);
 
-      if (failedDownloads.length === 0) {
-        toast.success(
-          directoryHandle
-            ? `Saved all ${downloadableRecordings.length} recording(s) to selected folder`
-            : `Downloaded all ${downloadableRecordings.length} recording(s)`
-        );
+      if (failedCount > 0) {
+        toast.error(`Downloaded ${downloadedCount}/${downloadableRecordings.length}. ${failedCount} failed.`);
         return;
       }
 
-      const downloadedCount = downloadableRecordings.length - failedDownloads.length;
-      const failedPreview = failedDownloads.slice(0, 2).join(", ");
-      const failedSuffix = failedDownloads.length > 2 ? "..." : "";
-
-      if (downloadedCount > 0) {
-        toast.error(
-          `Downloaded ${downloadedCount}/${downloadableRecordings.length}. Failed: ${failedPreview}${failedSuffix}`
-        );
-        return;
-      }
-
-      toast.error(`All downloads failed: ${failedPreview}${failedSuffix}`);
+      toast.success(`Downloaded ${downloadedCount} recording(s) in one ZIP`);
     } catch (err) {
       console.error("DOWNLOAD ALL USER RECORDINGS ERROR:", err);
       toast.dismiss(loadingToast);

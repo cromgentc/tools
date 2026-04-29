@@ -5,6 +5,7 @@ import Record from "../models/Record.js";
 import Metadata from "../models/Metadata.js";
 import { removeRecordingAssets } from "../utils/recordingCleanup.js";
 import fs from "fs";
+import path from "path";
 import mongoose from "mongoose";
 import xlsx from "xlsx";
 import { serializeUserActivity } from "../utils/userActivity.js";
@@ -364,6 +365,149 @@ const getLinkedScriptIdsFromRecordings = (recordings = []) => [
       .map((value) => String(value))
   ),
 ];
+
+const zipCrcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+
+  return value >>> 0;
+});
+
+const getZipCrc32 = (buffer) => {
+  let crc = 0xffffffff;
+
+  for (const byte of buffer) {
+    crc = zipCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+const getZipDateTime = (date = new Date()) => {
+  const year = Math.max(1980, date.getFullYear());
+
+  return {
+    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+  };
+};
+
+const sanitizeFileNamePart = (value) => {
+  const safeValue = String(value || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return safeValue || "recording";
+};
+
+const createZipBuffer = (files) => {
+  const localParts = [];
+  const centralParts = [];
+  const { date, time } = getZipDateTime();
+  let offset = 0;
+
+  for (const file of files) {
+    const data = Buffer.from(file.buffer);
+    const name = Buffer.from(file.name, "utf8");
+    const crc = getZipCrc32(data);
+
+    const localHeader = Buffer.alloc(30 + name.length);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(time, 10);
+    localHeader.writeUInt16LE(date, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    name.copy(localHeader, 30);
+
+    localParts.push(localHeader, data);
+
+    const centralHeader = Buffer.alloc(46 + name.length);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(time, 12);
+    centralHeader.writeUInt16LE(date, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(data.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    name.copy(centralHeader, 46);
+
+    centralParts.push(centralHeader);
+    offset += localHeader.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(0, 4);
+  endRecord.writeUInt16LE(0, 6);
+  endRecord.writeUInt16LE(files.length, 8);
+  endRecord.writeUInt16LE(files.length, 10);
+  endRecord.writeUInt32LE(centralSize, 12);
+  endRecord.writeUInt32LE(offset, 16);
+  endRecord.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, endRecord]);
+};
+
+const readRecordingBuffer = async (recording) => {
+  const localPath = recording.filename
+    ? path.resolve("uploads", path.basename(recording.filename))
+    : null;
+
+  if (localPath && fs.existsSync(localPath)) {
+    return fs.promises.readFile(localPath);
+  }
+
+  if (!recording.audioLink) {
+    throw new Error("Audio link missing");
+  }
+
+  const response = await fetch(recording.audioLink);
+
+  if (!response.ok) {
+    throw new Error(`Audio fetch failed with ${response.status}`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+};
+
+const runWithConcurrency = async (items, limit, worker) => {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
+};
 
 // =========================
 // ADD VENDOR
@@ -1194,6 +1338,90 @@ export const deleteAllUserRecordings = async (req, res) => {
     res.status(500).json({
       success: false,
       message: err.message || "Failed to delete user recordings",
+    });
+  }
+};
+
+export const downloadAllUserRecordings = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const user = await User.findById(id).select("name mobile email").lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const scripts = await findRelatedScripts(user);
+    const scriptIds = scripts.map((script) => script._id);
+    const recordings = await Recording.find(buildRelatedRecordingsQuery(id, scriptIds))
+      .sort({ uploadedAt: -1 })
+      .lean();
+
+    const downloadableRecordings = recordings.filter((recording) => recording.audioLink || recording.filename);
+
+    if (downloadableRecordings.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No recordings available to download",
+      });
+    }
+
+    const results = await runWithConcurrency(downloadableRecordings, 5, async (recording, index) => {
+      try {
+        const buffer = await readRecordingBuffer(recording);
+        const baseName = String(recording.filename || `recording-${index + 1}`)
+          .replace(/\.[^./\\]+$/, "");
+        const fileName = `${sanitizeFileNamePart(user.mobile)}-${sanitizeFileNamePart(baseName)}-${sanitizeFileNamePart(
+          recording._id || `recording-${index + 1}`
+        )}.wav`;
+
+        return { fileName, buffer };
+      } catch (err) {
+        console.error("DOWNLOAD USER RECORDING ITEM ERROR:", {
+          recordingId: recording._id,
+          error: err.message,
+        });
+        return null;
+      }
+    });
+
+    const files = results.filter(Boolean);
+
+    if (files.length === 0) {
+      return res.status(502).json({
+        success: false,
+        message: "Audio files could not be loaded",
+      });
+    }
+
+    const zipBuffer = createZipBuffer(files.map((file) => ({
+      name: file.fileName,
+      buffer: file.buffer,
+    })));
+    const zipName = `${sanitizeFileNamePart(user.mobile)}-recordings-wav.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+    res.setHeader("Content-Length", zipBuffer.length);
+    res.setHeader("X-Downloaded-Recordings", String(files.length));
+    res.setHeader("X-Failed-Recordings", String(downloadableRecordings.length - files.length));
+    return res.send(zipBuffer);
+  } catch (err) {
+    console.error("DOWNLOAD ALL USER RECORDINGS ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to download user recordings",
     });
   }
 };
