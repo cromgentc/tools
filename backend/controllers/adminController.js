@@ -1382,9 +1382,7 @@ export const downloadAllUserRecordings = async (req, res) => {
         const buffer = await readRecordingBuffer(recording);
         const baseName = String(recording.filename || `recording-${index + 1}`)
           .replace(/\.[^./\\]+$/, "");
-        const fileName = `${sanitizeFileNamePart(user.mobile)}-${sanitizeFileNamePart(baseName)}-${sanitizeFileNamePart(
-          recording._id || `recording-${index + 1}`
-        )}.wav`;
+        const fileName = `${sanitizeFileNamePart(baseName)}.wav`;
 
         return { fileName, buffer };
       } catch (err) {

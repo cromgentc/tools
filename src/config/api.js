@@ -1,4 +1,9 @@
-const DEFAULT_API_BASE_URL = "https://recording-tools.onrender.com";
+export const API_URLS = {
+  LOCAL: "http://localhost:5000",
+  LIVE: "https://recording-tools.onrender.com",
+};
+
+const DEFAULT_API_BASE_URL = import.meta.env.DEV ? API_URLS.LOCAL : API_URLS.LIVE;
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_URL || DEFAULT_API_BASE_URL

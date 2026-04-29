@@ -178,12 +178,10 @@ const sanitizeFileNamePart = (value) => {
 
 const getRecordingDisplayName = (recording, index = 0) => recording?.filename || `recording-${index + 1}`;
 
-const getRecordingDownloadName = (recording, mobile, index = 0, format = "wav") => {
+const getRecordingDownloadName = (recording, _mobile, index = 0, format = "wav") => {
   const baseName = getRecordingDisplayName(recording, index).replace(/\.[^./\\]+$/, "");
 
-  return `${sanitizeFileNamePart(mobile)}-${sanitizeFileNamePart(baseName)}-${sanitizeFileNamePart(
-    recording?._id || `recording-${index + 1}`
-  )}.${format}`;
+  return `${sanitizeFileNamePart(baseName)}.${format}`;
 };
 
 const convertAudioToBlob = async ({ audioUrl, format = "wav" }) => {
