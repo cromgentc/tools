@@ -95,10 +95,22 @@ export const uploadAllRecordings = async (req, res) => {
       // If Cloudinary fails, serve from local uploads folder
       console.warn("⚠️ Cloudinary upload failed, using local storage:", cloudinaryErr.message);
       const backendBaseUrl = (
-        process.env.BACKEND_URL || "https://recording-tools.onrender.com"
+        process.env.BACKEND_URL || "http://localhost:5000"
       ).replace(/\/+$/, "");
+      const canUseLocalUploads =
+        process.env.NODE_ENV !== "production" && /^https?:\/\/localhost(:\d+)?$/i.test(backendBaseUrl);
+
+      if (!canUseLocalUploads) {
+        fs.unlinkSync(req.file.path);
+        return res.status(502).json({
+          success: false,
+          message:
+            "Cloudinary upload failed on live server. Please check CLOUD_NAME, API_KEY and API_SECRET environment variables.",
+        });
+      }
+
       audioLink = `${backendBaseUrl}/uploads/${req.file.filename}`;
-      public_id = null; // No public_id for local files
+      public_id = null;
     }
 
     // ===== SAVE IN MONGODB =====

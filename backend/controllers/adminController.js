@@ -4,6 +4,7 @@ import Recording from "../models/Recording.js";
 import Record from "../models/Record.js";
 import Metadata from "../models/Metadata.js";
 import { removeRecordingAssets } from "../utils/recordingCleanup.js";
+import axios from "axios";
 import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
@@ -484,13 +485,39 @@ const readRecordingBuffer = async (recording) => {
     throw new Error("Audio link missing");
   }
 
-  const response = await fetch(recording.audioLink);
+  let lastError = null;
 
-  if (!response.ok) {
-    throw new Error(`Audio fetch failed with ${response.status}`);
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await axios.get(recording.audioLink, {
+        responseType: "arraybuffer",
+        timeout: 90000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        headers: {
+          Accept: "audio/*,video/*,application/octet-stream,*/*",
+          "User-Agent": "cromgentool-audio-downloader/1.0",
+        },
+      });
+
+      return Buffer.from(response.data);
+    } catch (err) {
+      lastError = err;
+      const status = err.response?.status;
+
+      if (status && status >= 400 && status < 500) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+    }
   }
 
-  return Buffer.from(await response.arrayBuffer());
+  throw new Error(
+    lastError?.response?.status
+      ? `Audio fetch failed with ${lastError.response.status}`
+      : lastError?.message || "Audio fetch failed"
+  );
 };
 
 const runWithConcurrency = async (items, limit, worker) => {
@@ -1377,7 +1404,7 @@ export const downloadAllUserRecordings = async (req, res) => {
       });
     }
 
-    const results = await runWithConcurrency(downloadableRecordings, 5, async (recording, index) => {
+    const results = await runWithConcurrency(downloadableRecordings, 2, async (recording, index) => {
       try {
         const buffer = await readRecordingBuffer(recording);
         const baseName = String(recording.filename || `recording-${index + 1}`)
