@@ -48,6 +48,59 @@ const triggerBrowserDownload = (blob, fileName) => {
   window.URL.revokeObjectURL(blobUrl);
 };
 
+const escapeExcelValue = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const downloadExcelTable = ({ fileName, sheets }) => {
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          table { border-collapse: collapse; }
+          th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
+          th { font-weight: 700; background: #e5e7eb; }
+          h2 { font-family: Arial, sans-serif; }
+        </style>
+      </head>
+      <body>
+        ${sheets
+          .map(
+            (sheet) => `
+              <h2>${escapeExcelValue(sheet.title)}</h2>
+              <table>
+                <thead>
+                  <tr>${sheet.headers.map((header) => `<th>${escapeExcelValue(header)}</th>`).join("")}</tr>
+                </thead>
+                <tbody>
+                  ${sheet.rows
+                    .map(
+                      (row) =>
+                        `<tr>${sheet.headers
+                          .map((header) => `<td>${escapeExcelValue(row[header])}</td>`)
+                          .join("")}</tr>`
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+              <br />
+            `
+          )
+          .join("")}
+      </body>
+    </html>
+  `;
+
+  triggerBrowserDownload(
+    new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" }),
+    fileName
+  );
+};
+
 const crcTable = Array.from({ length: 256 }, (_, index) => {
   let value = index;
 
@@ -429,7 +482,9 @@ export default function AddUser({ accessRole = "admin" }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [vendorSaving, setVendorSaving] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [deletingUserId, setDeletingUserId] = useState(null);
+  const [deletingSelectedUsers, setDeletingSelectedUsers] = useState(false);
   const [deletingAllRecordings, setDeletingAllRecordings] = useState(false);
   const [downloadingAllRecordings, setDownloadingAllRecordings] = useState(false);
   const storedVendorId = String(currentUser?.vendorId || "").trim();
@@ -519,6 +574,9 @@ export default function AddUser({ accessRole = "admin" }) {
           : nextUsers.filter((user) => user.role !== "vendor");
 
       setUsers(scopedUsers);
+      setSelectedUserIds((prev) =>
+        prev.filter((id) => scopedUsers.some((user) => user._id === id))
+      );
       return scopedUsers;
     } catch (err) {
       console.error("FETCH USERS ERROR:", err);
@@ -566,6 +624,109 @@ export default function AddUser({ accessRole = "admin" }) {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const getUserExportRow = (user) => ({
+    Name: user?.name || "",
+    Mobile: user?.mobile || "",
+    Email: user?.email || "",
+    Role: user?.role || "",
+    "Vendor Name": user?.vendorName || "Unassigned Vendor",
+    "Vendor Code": user?.vendorCode || "N/A",
+    "Account Status": user?.accountStatus || "",
+    Presence: user?.presenceStatus || "",
+    "Completed Scripts": user?.completedScripts || 0,
+    "Pending Scripts": user?.pendingScripts || 0,
+    "Total Recordings": user?.totalRecordings || 0,
+    "Active Time": formatDuration(user?.totalActiveSeconds),
+    "Last Active": formatDateTime(user?.lastActiveAt),
+    "Registered On": formatDateTime(user?.createdAt),
+  });
+
+  const downloadAllUsersExcel = async () => {
+    const exportUsers = users.length > 0 ? users : await fetchUsers();
+
+    if (exportUsers.length === 0) {
+      toast.error("No users available to download");
+      return;
+    }
+
+    downloadExcelTable({
+      fileName: `registered-users-${new Date().toISOString().slice(0, 10)}.xls`,
+      sheets: [
+        {
+          title: "Registered Users",
+          headers: Object.keys(getUserExportRow(exportUsers[0])),
+          rows: exportUsers.map(getUserExportRow),
+        },
+      ],
+    });
+    toast.success("All users Excel downloaded");
+  };
+
+  const downloadSelectedUserExcel = () => {
+    if (!selectedUser) {
+      toast.error("Please select a user first");
+      return;
+    }
+
+    const summaryHeaders = Object.keys(getUserExportRow(selectedUser));
+    const scriptRows = selectedUser.scripts.map((script, index) => ({
+      "#": index + 1,
+      "Script ID": script._id,
+      Content: script.content,
+      Status: script.status,
+      Created: formatDateTime(script.createdAt),
+      Completed: formatDateTime(script.completedAt),
+    }));
+    const recordingRows = selectedUser.recordings.map((recording, index) => ({
+      "#": index + 1,
+      "Recording ID": recording._id,
+      "Recording Name": getRecordingDisplayName(recording, index),
+      "Audio Link": recording.audioLink || "",
+      "File Size": recording.fileSize || 0,
+      Uploaded: formatDateTime(recording.uploadedAt),
+      "Script Content": recording.script?.content || "",
+      "Script Status": recording.script?.status || "",
+    }));
+
+    downloadExcelTable({
+      fileName: `${sanitizeFileNamePart(selectedUser.mobile || selectedUser.name)}-details.xls`,
+      sheets: [
+        {
+          title: "User Details",
+          headers: summaryHeaders,
+          rows: [getUserExportRow(selectedUser)],
+        },
+        {
+          title: "Assigned Scripts",
+          headers: ["#", "Script ID", "Content", "Status", "Created", "Completed"],
+          rows: scriptRows.length > 0 ? scriptRows : [{ "#": "", "Script ID": "", Content: "No scripts found", Status: "", Created: "", Completed: "" }],
+        },
+        {
+          title: "Recordings",
+          headers: ["#", "Recording ID", "Recording Name", "Audio Link", "File Size", "Uploaded", "Script Content", "Script Status"],
+          rows:
+            recordingRows.length > 0
+              ? recordingRows
+              : [{ "#": "", "Recording ID": "", "Recording Name": "No recordings found", "Audio Link": "", "File Size": "", Uploaded: "", "Script Content": "", "Script Status": "" }],
+        },
+      ],
+    });
+    toast.success("User details Excel downloaded");
+  };
+
+  const toggleUserSelection = (userId) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const toggleAllUserSelection = () => {
+    const allUserIds = users.map((user) => user._id);
+    setSelectedUserIds((prev) =>
+      prev.length === allUserIds.length ? [] : allUserIds
+    );
   };
 
   const toggleUsersTable = async () => {
@@ -806,12 +967,14 @@ export default function AddUser({ accessRole = "admin" }) {
     }
   };
 
-  const deleteUserRecord = async (userToDelete) => {
+  const deleteUserRecord = async (userToDelete, { skipConfirm = false } = {}) => {
     if (!userToDelete?._id) return;
 
-    const confirmed = window.confirm(
-      `Are you sure to delete ${userToDelete.name}? This will permanently remove the user and related data.`
-    );
+    const confirmed =
+      skipConfirm ||
+      window.confirm(
+        `Are you sure to delete ${userToDelete.name}? This will permanently remove the user and related data.`
+      );
 
     if (!confirmed) return;
 
@@ -829,6 +992,7 @@ export default function AddUser({ accessRole = "admin" }) {
       }
 
       toast.success(data.message || "User deleted successfully");
+      setSelectedUserIds((prev) => prev.filter((id) => id !== userToDelete._id));
 
       if (selectedUserId === userToDelete._id) {
         setSelectedUser(null);
@@ -845,6 +1009,34 @@ export default function AddUser({ accessRole = "admin" }) {
       toast.error(err.message || "Failed to delete user");
     } finally {
       setDeletingUserId(null);
+    }
+  };
+
+  const handleDeleteSelectedUsers = async () => {
+    const usersToDelete = users.filter((user) => selectedUserIds.includes(user._id));
+
+    if (usersToDelete.length === 0) {
+      toast.error("Please select at least one user");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure to delete ${usersToDelete.length} selected user(s)? This will permanently remove users and related data.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingSelectedUsers(true);
+
+      for (const userToDelete of usersToDelete) {
+        await deleteUserRecord(userToDelete, { skipConfirm: true });
+      }
+
+      setSelectedUserIds([]);
+      toast.success(`${usersToDelete.length} selected user(s) deleted`);
+    } finally {
+      setDeletingSelectedUsers(false);
     }
   };
 
@@ -956,7 +1148,8 @@ export default function AddUser({ accessRole = "admin" }) {
   const tableButtonLabel = showUsersTable ? "Hide Registered Users" : "Show Registered Users";
   const hasAnyRecordings = (selectedUser?.recordings?.length || 0) > 0;
   const hasDownloadableRecordings = selectedUser?.recordings?.some((recording) => recording.audioLink) || false;
-  const isDeletingAnyUser = deletingUserId !== null;
+  const allVisibleUsersSelected = users.length > 0 && selectedUserIds.length === users.length;
+  const isDeletingAnyUser = deletingUserId !== null || deletingSelectedUsers;
   const isDeletingSelectedUser = selectedUser ? deletingUserId === selectedUser._id : false;
 
   return (
@@ -1327,37 +1520,95 @@ export default function AddUser({ accessRole = "admin" }) {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={toggleUsersTable}
-            disabled={usersLoading}
-            className={`flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
-              usersLoading
-                ? "cursor-not-allowed bg-gray-600"
-                : "bg-cyan-600 hover:bg-cyan-700 active:scale-95"
-            }`}
-          >
-            {usersLoading ? (
-              <>
-                <Loader className="h-5 w-5 animate-spin" />
-                Loading Users...
-              </>
-            ) : (
-              <>
-                <ChevronDown className={`h-5 w-5 transition-transform ${showUsersTable ? "rotate-180" : ""}`} />
-                {tableButtonLabel}
-                {users.length > 0 ? `(${users.length})` : ""}
-              </>
-            )}
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={downloadAllUsersExcel}
+              disabled={usersLoading}
+              className={`flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
+                usersLoading
+                  ? "cursor-not-allowed bg-gray-600"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+              }`}
+            >
+              <Download className="h-5 w-5" />
+              Download All Excel
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleUsersTable}
+              disabled={usersLoading}
+              className={`flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
+                usersLoading
+                  ? "cursor-not-allowed bg-gray-600"
+                  : "bg-cyan-600 hover:bg-cyan-700 active:scale-95"
+              }`}
+            >
+              {usersLoading ? (
+                <>
+                  <Loader className="h-5 w-5 animate-spin" />
+                  Loading Users...
+                </>
+              ) : (
+                <>
+                  <ChevronDown className={`h-5 w-5 transition-transform ${showUsersTable ? "rotate-180" : ""}`} />
+                  {tableButtonLabel}
+                  {users.length > 0 ? `(${users.length})` : ""}
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {showUsersTable && (
           <div className="mt-6 space-y-6">
+            {!isVendorMode && selectedUserIds.length > 0 && (
+              <div className="flex flex-col gap-3 rounded-lg border border-red-600/30 bg-red-900/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-semibold text-red-100">
+                  {selectedUserIds.length} user(s) selected
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedUsers}
+                  disabled={isDeletingAnyUser}
+                  className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+                    isDeletingAnyUser
+                      ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                      : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
+                  }`}
+                >
+                  {deletingSelectedUsers ? (
+                    <>
+                      <Loader className="h-4 w-4 animate-spin" />
+                      Deleting Selected...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Delete Selected
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
             <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/60">
-              <table className={`w-full ${isVendorMode ? "min-w-[1120px]" : "min-w-[1320px]"}`}>
+              <table className={`w-full ${isVendorMode ? "min-w-[1120px]" : "min-w-[1380px]"}`}>
                 <thead className="bg-gray-800/80">
                   <tr>
+                    {!isVendorMode && (
+                      <th className="w-12 p-3 text-left text-sm font-semibold text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleUsersSelected}
+                          onChange={toggleAllUserSelection}
+                          disabled={users.length === 0 || isDeletingAnyUser}
+                          className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-cyan-500"
+                          aria-label="Select all users"
+                        />
+                      </th>
+                    )}
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Name</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Mobile</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Email</th>
@@ -1377,7 +1628,7 @@ export default function AddUser({ accessRole = "admin" }) {
                 <tbody>
                   {users.length === 0 && !usersLoading && (
                     <tr>
-                      <td colSpan={isVendorMode ? 10 : 11} className="p-6 text-center text-gray-400">
+                      <td colSpan={isVendorMode ? 10 : 12} className="p-6 text-center text-gray-400">
                         No registered users found
                       </td>
                     </tr>
@@ -1393,6 +1644,22 @@ export default function AddUser({ accessRole = "admin" }) {
                         selectedUserId === user._id ? "bg-gray-800" : "bg-transparent"
                       }`}
                     >
+                      {!isVendorMode && (
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.includes(user._id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleUserSelection(user._id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            disabled={isDeletingAnyUser}
+                            className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-cyan-500"
+                            aria-label={`Select ${user.name}`}
+                          />
+                        </td>
+                      )}
                       <td className="p-3">
                         <div>
                           <p className="font-semibold text-white">{user.name}</p>
@@ -1481,8 +1748,18 @@ export default function AddUser({ accessRole = "admin" }) {
                     </p>
                   </div>
 
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={downloadSelectedUserExcel}
+                      className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 font-semibold transition-all hover:bg-emerald-700 active:scale-95"
+                    >
+                      <Download className="h-5 w-5" />
+                      Download User Excel
+                    </button>
+
                   {!isVendorMode && (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                    <>
                     <button
                       type="button"
                       onClick={handleDownloadAllRecordings}
@@ -1587,12 +1864,13 @@ export default function AddUser({ accessRole = "admin" }) {
                       ) : (
                         <>
                           <Trash2 className="h-5 w-5" />
-                          Delete User
+                      Delete User
                         </>
                       )}
                     </button>
-                    </div>
+                    </>
                   )}
+                  </div>
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
