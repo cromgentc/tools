@@ -4,6 +4,7 @@ import Recording from "../models/Recording.js";
 import Record from "../models/Record.js";
 import Metadata from "../models/Metadata.js";
 import { removeRecordingAssets } from "../utils/recordingCleanup.js";
+import archiver from "archiver";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
@@ -26,6 +27,9 @@ import {
 } from "../utils/vendor.js";
 
 const USER_ACCOUNT_STATUSES = new Set(["active", "inactive", "suspended"]);
+const USER_RECORDING_DOWNLOAD_CONCURRENCY = Number(
+  process.env.USER_RECORDING_DOWNLOAD_CONCURRENCY || 6
+);
 
 const normalizeUserPayload = (input = {}) => ({
   name: String(input.name ?? input.Name ?? input.fullName ?? input["Full Name"] ?? "").trim(),
@@ -1404,46 +1408,67 @@ export const downloadAllUserRecordings = async (req, res) => {
       });
     }
 
-    const results = await runWithConcurrency(downloadableRecordings, 2, async (recording, index) => {
-      try {
-        const buffer = await readRecordingBuffer(recording);
-        const baseName = String(recording.filename || `recording-${index + 1}`)
-          .replace(/\.[^./\\]+$/, "");
-        const fileName = `${sanitizeFileNamePart(baseName)}.wav`;
-
-        return { fileName, buffer };
-      } catch (err) {
-        console.error("DOWNLOAD USER RECORDING ITEM ERROR:", {
-          recordingId: recording._id,
-          error: err.message,
-        });
-        return null;
-      }
-    });
-
-    const files = results.filter(Boolean);
-
-    if (files.length === 0) {
-      return res.status(502).json({
-        success: false,
-        message: "Audio files could not be loaded",
-      });
-    }
-
-    const zipBuffer = createZipBuffer(files.map((file) => ({
-      name: file.fileName,
-      buffer: file.buffer,
-    })));
     const zipName = `${sanitizeFileNamePart(user.mobile)}-recordings-wav.zip`;
+    const archive = archiver("zip", { store: true });
+    let downloadedCount = 0;
+    let failedCount = 0;
 
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
-    res.setHeader("Content-Length", zipBuffer.length);
-    res.setHeader("X-Downloaded-Recordings", String(files.length));
-    res.setHeader("X-Failed-Recordings", String(downloadableRecordings.length - files.length));
-    return res.send(zipBuffer);
+    res.setHeader("X-Accel-Buffering", "no");
+
+    archive.on("warning", (err) => {
+      console.warn("DOWNLOAD USER RECORDINGS ZIP WARNING:", err.message);
+    });
+    archive.on("error", (err) => {
+      console.error("DOWNLOAD USER RECORDINGS ZIP ERROR:", err);
+      if (!res.destroyed) {
+        res.destroy(err);
+      }
+    });
+
+    archive.pipe(res);
+
+    await runWithConcurrency(
+      downloadableRecordings,
+      USER_RECORDING_DOWNLOAD_CONCURRENCY,
+      async (recording, index) => {
+        try {
+          const buffer = await readRecordingBuffer(recording);
+          const baseName = String(recording.filename || `recording-${index + 1}`)
+            .replace(/\.[^./\\]+$/, "");
+          const fileName = `${sanitizeFileNamePart(baseName)}.wav`;
+
+          archive.append(buffer, { name: fileName });
+          downloadedCount += 1;
+        } catch (err) {
+          failedCount += 1;
+          console.error("DOWNLOAD USER RECORDING ITEM ERROR:", {
+            recordingId: recording._id,
+            error: err.message,
+          });
+        }
+      }
+    );
+
+    if (downloadedCount === 0) {
+      archive.append("No audio files could be loaded.", { name: "download-failed.txt" });
+    }
+
+    if (failedCount > 0) {
+      archive.append(
+        `${failedCount} of ${downloadableRecordings.length} recording(s) could not be downloaded.`,
+        { name: "download-summary.txt" }
+      );
+    }
+
+    await archive.finalize();
+    return undefined;
   } catch (err) {
     console.error("DOWNLOAD ALL USER RECORDINGS ERROR:", err);
+    if (res.headersSent) {
+      return res.end();
+    }
     return res.status(500).json({
       success: false,
       message: err.message || "Failed to download user recordings",

@@ -48,12 +48,33 @@ const triggerBrowserDownload = (blob, fileName) => {
   window.URL.revokeObjectURL(blobUrl);
 };
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const escapeExcelValue = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+const EXCEL_LINK_CELL = "__excelLink";
+
+const createExcelLinkCell = (href, text = "Download Recording") =>
+  href
+    ? {
+        [EXCEL_LINK_CELL]: true,
+        href,
+        text,
+      }
+    : "";
+
+const renderExcelCell = (value) => {
+  if (value?.[EXCEL_LINK_CELL] && value.href) {
+    return `<td><a href="${escapeExcelValue(value.href)}">${escapeExcelValue(value.text || value.href)}</a></td>`;
+  }
+
+  return `<td>${escapeExcelValue(value)}</td>`;
+};
 
 const downloadExcelTable = ({ fileName, sheets }) => {
   const html = `
@@ -81,7 +102,7 @@ const downloadExcelTable = ({ fileName, sheets }) => {
                     .map(
                       (row) =>
                         `<tr>${sheet.headers
-                          .map((header) => `<td>${escapeExcelValue(row[header])}</td>`)
+                          .map((header) => renderExcelCell(row[header]))
                           .join("")}</tr>`
                     )
                     .join("")}
@@ -237,6 +258,31 @@ const getRecordingDownloadName = (recording, _mobile, index = 0, format = "wav")
   return `${sanitizeFileNamePart(baseName)}.${format}`;
 };
 
+const getRecordingDirectDownloadLink = (recording, index = 0) => {
+  const audioLink = recording?.audioLink || "";
+
+  if (!audioLink) return "";
+
+  const cloudinaryUploadMatch = audioLink.match(
+    /^(https?:\/\/res\.cloudinary\.com\/[^/]+\/video\/upload\/)(.+)$/i
+  );
+
+  if (!cloudinaryUploadMatch) return audioLink;
+
+  const [, uploadPrefix, assetPath] = cloudinaryUploadMatch;
+  const cleanAssetPath = assetPath
+    .split("/")
+    .filter((segment) => !/^fl_attachment(?::[^/]+)?$/i.test(segment) && !/^f_wav$/i.test(segment))
+    .join("/");
+
+  const attachmentName = sanitizeFileNamePart(
+    getRecordingDownloadName(recording, null, index, "wav").replace(/\.[^./\\]+$/, "")
+  ).replace(/[^a-zA-Z0-9_-]/g, "-");
+  const wavAssetPath = cleanAssetPath.replace(/(?:\.[^./?#]+)?([?#].*)?$/, ".wav$1");
+
+  return `${uploadPrefix}fl_attachment:${encodeURIComponent(attachmentName)}/f_wav/${wavAssetPath}`;
+};
+
 const convertAudioToBlob = async ({ audioUrl, format = "wav" }) => {
   if (!audioUrl) {
     throw new Error("Audio not available");
@@ -291,6 +337,21 @@ const convertAndDownload = async ({ audioUrl, format = "wav", fileName, silent =
       error: err,
     };
   }
+};
+
+const downloadRecordingFile = async ({ recording, mobile, index }) => {
+  const downloadUrl = getRecordingDirectDownloadLink(recording, index);
+  const fileName = getRecordingDownloadName(recording, mobile, index, "wav");
+  const response = await fetch(downloadUrl);
+
+  if (!response.ok) {
+    throw new Error(`Recording ${index + 1} download failed`);
+  }
+
+  const blob = await response.blob();
+  triggerBrowserDownload(blob, fileName);
+
+  return fileName;
 };
 
 const downloadRecordingsZipInBrowser = async (recordings, mobile) => {
@@ -683,7 +744,10 @@ export default function AddUser({ accessRole = "admin" }) {
       "#": index + 1,
       "Recording ID": recording._id,
       "Recording Name": getRecordingDisplayName(recording, index),
-      "Audio Link": recording.audioLink || "",
+      "Recording Link": createExcelLinkCell(
+        getRecordingDirectDownloadLink(recording, index),
+        "Download Recording"
+      ),
       "File Size": recording.fileSize || 0,
       Uploaded: formatDateTime(recording.uploadedAt),
       "Script Content": recording.script?.content || "",
@@ -705,11 +769,11 @@ export default function AddUser({ accessRole = "admin" }) {
         },
         {
           title: "Recordings",
-          headers: ["#", "Recording ID", "Recording Name", "Audio Link", "File Size", "Uploaded", "Script Content", "Script Status"],
+          headers: ["#", "Recording ID", "Recording Name", "Recording Link", "File Size", "Uploaded", "Script Content", "Script Status"],
           rows:
             recordingRows.length > 0
               ? recordingRows
-              : [{ "#": "", "Recording ID": "", "Recording Name": "No recordings found", "Audio Link": "", "File Size": "", Uploaded: "", "Script Content": "", "Script Status": "" }],
+              : [{ "#": "", "Recording ID": "", "Recording Name": "No recordings found", "Recording Link": "", "File Size": "", Uploaded: "", "Script Content": "", "Script Status": "" }],
         },
       ],
     });
@@ -1096,46 +1160,51 @@ export default function AddUser({ accessRole = "admin" }) {
     }
 
     const loadingToast = toast.loading(
-      `Downloading ${downloadableRecordings.length} recording(s) for ${selectedUser.mobile}...`
+      `Starting ${downloadableRecordings.length} recording(s) one by one...`
     );
 
     try {
       setDownloadingAllRecordings(true);
 
-      const response = await fetch(API_ENDPOINTS.ADMIN_DOWNLOAD_USER_RECORDINGS(selectedUser._id));
-      let zipBlob = null;
-      let downloadedCount = downloadableRecordings.length;
-      let failedCount = 0;
+      let downloadedCount = 0;
+      const failedRecordings = [];
 
-      if (response.status === 404) {
-        const fallbackResult = await downloadRecordingsZipInBrowser(
-          downloadableRecordings,
-          selectedUser.mobile
+      for (const [index, recording] of downloadableRecordings.entries()) {
+        toast.loading(
+          `Downloading ${index + 1}/${downloadableRecordings.length} recording(s)...`,
+          { id: loadingToast }
         );
-        zipBlob = fallbackResult.zipBlob;
-        downloadedCount = fallbackResult.downloadedCount;
-        failedCount = fallbackResult.failedCount;
-      } else if (!response.ok) {
-        const errorData = await readJsonSafe(response);
-        throw new Error(errorData.message || "Bulk download failed");
-      } else {
-        zipBlob = await response.blob();
-        downloadedCount =
-          Number(response.headers.get("X-Downloaded-Recordings")) || downloadableRecordings.length;
-        failedCount = Number(response.headers.get("X-Failed-Recordings")) || 0;
+
+        try {
+          await downloadRecordingFile({
+            recording,
+            mobile: selectedUser.mobile,
+            index,
+          });
+          downloadedCount += 1;
+        } catch (err) {
+          failedRecordings.push(recording);
+          console.error("DOWNLOAD ALL RECORDING ITEM ERROR:", {
+            recordingId: recording._id,
+            error: err.message,
+          });
+        }
+
+        if (index < downloadableRecordings.length - 1) {
+          await wait(500);
+        }
       }
 
-      const zipName = `${sanitizeFileNamePart(selectedUser.mobile)}-recordings-wav.zip`;
-
-      triggerBrowserDownload(zipBlob, zipName);
       toast.dismiss(loadingToast);
 
-      if (failedCount > 0) {
-        toast.error(`Downloaded ${downloadedCount}/${downloadableRecordings.length}. ${failedCount} failed.`);
+      if (failedRecordings.length > 0) {
+        toast.error(
+          `${downloadedCount}/${downloadableRecordings.length} recording(s) downloaded. ${failedRecordings.length} failed.`
+        );
         return;
       }
 
-      toast.success(`Downloaded ${downloadedCount} recording(s) in one ZIP`);
+      toast.success(`All ${downloadedCount} recording(s) downloaded one by one`);
     } catch (err) {
       console.error("DOWNLOAD ALL USER RECORDINGS ERROR:", err);
       toast.dismiss(loadingToast);
@@ -1773,12 +1842,12 @@ export default function AddUser({ accessRole = "admin" }) {
                       {downloadingAllRecordings ? (
                         <>
                           <Loader className="h-5 w-5 animate-spin" />
-                          Downloading All...
+                          Starting One by One...
                         </>
                       ) : (
                         <>
                           <Download className="h-5 w-5" />
-                          Download All WAV
+                          Download All One by One
                         </>
                       )}
                     </button>
