@@ -22,6 +22,7 @@ import {
   Download,
   ChevronDown,
   Cloud,
+  Send,
   UserPlus,
   Upload,
   Settings as SettingsIcon,
@@ -46,6 +47,8 @@ export default function AdminDashboard() {
   );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userManagementMode, setUserManagementMode] = useState("");
+  const [scriptAssignMenuOpen, setScriptAssignMenuOpen] = useState(false);
+  const [scriptAssignMode, setScriptAssignMode] = useState("bulk");
   const [scriptMenuOpen, setScriptMenuOpen] = useState(false);
   const [scriptManagementMode, setScriptManagementMode] = useState("all");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -312,6 +315,64 @@ export default function AdminDashboard() {
     </div>
   );
 
+  const openScriptAssignMode = (mode) => {
+    setPage("addScript");
+    setScriptAssignMenuOpen(true);
+    setScriptAssignMode(mode);
+    closeSidebarOnMobile();
+  };
+
+  const scriptAssignMenu = () => (
+    <div>
+      <button
+        type="button"
+        onClick={() => {
+          setPage("addScript");
+          setScriptAssignMenuOpen((prev) => !prev);
+        }}
+        className={`w-full px-4 py-2.5 rounded-lg cursor-pointer transition flex items-center gap-3 text-sm ${
+          page === "addScript"
+            ? "bg-blue-600 text-white font-semibold shadow-lg"
+            : "hover:bg-gray-800 text-gray-300 hover:text-white"
+        }`}
+      >
+        <FileText className="w-5 h-5" />
+        <span className="flex-1 text-left">Script Assign</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${scriptAssignMenuOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {scriptAssignMenuOpen && (
+        <div className="mt-2 space-y-1 pl-4">
+          <button
+            type="button"
+            onClick={() => openScriptAssignMode("single")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
+              page === "addScript" && scriptAssignMode === "single"
+                ? "bg-blue-500/20 text-blue-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Send className="w-4 h-4" />
+            Single Script Assign
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openScriptAssignMode("bulk")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
+              page === "addScript" && scriptAssignMode === "bulk"
+                ? "bg-green-500/20 text-green-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            Bulk Script Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   const openScriptManagementMode = (mode) => {
     setPage("all");
     setScriptMenuOpen(true);
@@ -507,7 +568,7 @@ export default function AdminDashboard() {
 
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {isAdminMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
-          {isAdminMode && menuItem("addScript", "Add Script", <FileText className="w-5 h-5" />)}
+          {isAdminMode && scriptAssignMenu()}
           {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
           {userManagementMenu()}
           {isAdminMode && scriptManagementMenu()}
@@ -573,7 +634,7 @@ export default function AdminDashboard() {
             {page === "addScript" && (
               <>
                 <FileText className="w-5 h-5 text-green-400" />
-                <span className="truncate">Add Script</span>
+                <span className="truncate">Script Assign</span>
               </>
             )}
             {page === "addUser" && (
@@ -907,7 +968,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {isAdminMode && page === "addScript" && <AddScript />}
+          {isAdminMode && page === "addScript" && <AddScript mode={scriptAssignMode} />}
           {isAdminMode && page === "vendors" && <AddVendor />}
           {page === "addUser" && (
             <AddUser

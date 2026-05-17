@@ -8,10 +8,40 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const getVendorFromRow = async (row = {}) => {
+  const vendorId = String(row.vendorId || row.VendorId || row["Vendor ID"] || "").trim();
+  const vendorCode = String(row.vendorCode || row.VendorCode || row["Vendor Code"] || "").trim();
+  const vendorName = String(row.vendor || row.Vendor || row.vendorName || row.VendorName || row["Vendor Name"] || "").trim();
+
+  if (!vendorId && !vendorCode && !vendorName) {
+    return null;
+  }
+
+  const conditions = [];
+
+  if (vendorId) {
+    conditions.push({ _id: vendorId });
+  }
+
+  if (vendorCode) {
+    conditions.push({ vendorCode });
+  }
+
+  if (vendorName) {
+    conditions.push({ name: new RegExp(`^${vendorName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") });
+  }
+
+  return User.findOne({
+    role: "vendor",
+    $or: conditions,
+  });
+};
+
 // ASSIGN SCRIPT
 export const assignScript = async (req, res) => {
   try {
-    const { mobile, email, content } = req.body;
+    const { mobile, email, content, vendorId } = req.body;
+    const selectedVendorId = String(vendorId || "").trim();
 
     // ===== VALIDATION =====
     if (!mobile || !email || !content) {
@@ -42,6 +72,10 @@ export const assignScript = async (req, res) => {
     // Verify email matches
     if (user.email !== email) {
       return res.status(400).json({ message: "Email does not match user's registered email" });
+    }
+
+    if (selectedVendorId && String(user.vendorId || "") !== selectedVendorId) {
+      return res.status(400).json({ message: "User is not assigned to selected vendor" });
     }
 
     // Create script
@@ -181,6 +215,7 @@ export const bulkUploadScripts = async (req, res) => {
 
     const inserted = [];
     const errors = [];
+    const selectedVendorId = String(req.body?.vendorId || "").trim();
 
     // Process each row
     for (let i = 0; i < jsonData.length; i++) {
@@ -188,6 +223,9 @@ export const bulkUploadScripts = async (req, res) => {
       const mobile = String(row.mobile || row.Mobile || "").trim();
       const email = String(row.email || row.Email || "").trim();
       const content = String(row.content || row.Content || row.script || row.Script || "").trim();
+      const rowVendorValue = String(
+        row.vendor || row.Vendor || row.vendorName || row.VendorName || row.vendorCode || row.VendorCode || ""
+      ).trim();
 
       try {
         // Validation
@@ -206,6 +244,11 @@ export const bulkUploadScripts = async (req, res) => {
           continue;
         }
 
+        if (!rowVendorValue) {
+          errors.push(`Row ${i + 1}: Vendor is required`);
+          continue;
+        }
+
         // Find user
         const user = await User.findOne({ mobile });
         if (!user) {
@@ -216,6 +259,18 @@ export const bulkUploadScripts = async (req, res) => {
         // Verify email
         if (user.email.toLowerCase() !== email.toLowerCase()) {
           errors.push(`Row ${i + 1}: Email does not match user's registered email`);
+          continue;
+        }
+
+        const rowVendor = await getVendorFromRow(row);
+
+        if (!rowVendor) {
+          errors.push(`Row ${i + 1}: Vendor not found`);
+          continue;
+        }
+
+        if (String(user.vendorId || "") !== String(rowVendor._id)) {
+          errors.push(`Row ${i + 1}: User is not assigned to vendor ${rowVendorValue}`);
           continue;
         }
 

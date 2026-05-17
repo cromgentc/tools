@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { Cloud, Eye, Pencil, Plus, Save, Trash2, UserCircle, X } from "lucide-react";
+import { Cloud, Download, Eye, Pencil, Plus, Save, Trash2, UserCircle, X } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 import { getAdminSettings } from "./Settings";
 
@@ -33,6 +33,25 @@ const readCloudinaryAccounts = () => {
   }
 };
 
+const formatDateTime = (value) => {
+  if (!value) return "N/A";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "N/A";
+  }
+
+  return date.toLocaleString();
+};
+
+const escapeExcelValue = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 export default function AccountManagement() {
   const [cloudinary, setCloudinary] = useState(emptyCloudinary);
   const [cloudinaryAccounts, setCloudinaryAccounts] = useState([]);
@@ -44,9 +63,13 @@ export default function AccountManagement() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const storedAccounts = readCloudinaryAccounts();
+    const storedAccounts = readCloudinaryAccounts().map((account) => ({
+      ...account,
+      createdAt: account.createdAt || account.updatedAt || account.id || new Date().toISOString(),
+    }));
     const localSettings = getAdminSettings();
     setCloudinaryAccounts(storedAccounts);
+    localStorage.setItem(CLOUDINARY_ACCOUNTS_KEY, JSON.stringify(storedAccounts));
     setCloudinary((prev) => ({
       ...prev,
       ...localSettings,
@@ -58,6 +81,7 @@ export default function AccountManagement() {
     ) {
       const initialAccount = {
         id: Date.now(),
+        createdAt: new Date().toISOString(),
         cloudName: localSettings.cloudName || "",
         apiKey: localSettings.apiKey || "",
         apiSecret: localSettings.apiSecret || "",
@@ -88,6 +112,7 @@ export default function AccountManagement() {
         if (hasBackendAccount && latestStoredAccounts.length === 0) {
           const initialAccount = {
             id: Date.now(),
+            createdAt: new Date().toISOString(),
             cloudName: settings.cloudName || "",
             apiKey: settings.apiKey || "",
             apiSecret: settings.apiSecret || "",
@@ -197,6 +222,50 @@ export default function AccountManagement() {
     });
   };
 
+  const downloadCloudinaryExcel = () => {
+    if (cloudinaryAccounts.length === 0) {
+      toast.error("No Cloudinary account details to download");
+      return;
+    }
+
+    const headers = ["Sr No", "Cloud Name", "API Key", "API Secret", "Date"];
+    const rows = cloudinaryAccounts.map((account, index) => [
+      index + 1,
+      account.cloudName || "",
+      account.apiKey || "",
+      account.apiSecret || "",
+      formatDateTime(account.createdAt),
+    ]);
+    const html = `
+      <html>
+        <head><meta charset="UTF-8" /></head>
+        <body>
+          <table>
+            <thead>
+              <tr>${headers.map((header) => `<th>${escapeExcelValue(header)}</th>`).join("")}</tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map((row) => `<tr>${row.map((cell) => `<td>${escapeExcelValue(cell)}</td>`).join("")}</tr>`)
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = "cloudinary-account-details.xls";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+    toast.success("Cloudinary Excel downloaded");
+  };
+
   const performDeleteSelectedCloudinaryAccounts = async () => {
     try {
       const selectedSet = new Set(selectedIndexes);
@@ -242,6 +311,11 @@ export default function AccountManagement() {
 
       const nextAccount = {
         id: editingIndex === null ? Date.now() : cloudinaryAccounts[editingIndex]?.id || Date.now(),
+        createdAt:
+          editingIndex === null
+            ? new Date().toISOString()
+            : cloudinaryAccounts[editingIndex]?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         ...trimmedCloudinary,
       };
       const nextAccounts =
@@ -292,33 +366,46 @@ export default function AccountManagement() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
+              onClick={downloadCloudinaryExcel}
+              disabled={cloudinaryAccounts.length === 0}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                cloudinaryAccounts.length === 0
+                  ? "cursor-not-allowed bg-gray-800 text-gray-500"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+              }`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Excel
+            </button>
+            <button
+              type="button"
               onClick={requestDeleteSelectedCloudinaryAccounts}
               disabled={selectedIndexes.length === 0}
-              className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition ${
+              className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
                 selectedIndexes.length === 0
                   ? "cursor-not-allowed bg-gray-800 text-gray-500"
                   : "bg-red-600 hover:bg-red-700 active:scale-95"
               }`}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3.5 w-3.5" />
               Delete Selected
             </button>
             <button
               type="button"
               onClick={openAddModal}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 font-semibold transition hover:bg-cyan-700 active:scale-95"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-semibold transition hover:bg-cyan-700 active:scale-95"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Add Details
             </button>
           </div>
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-gray-700">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[1040px]">
             <thead className="bg-gray-800">
               <tr>
-                <th className="p-3 text-left text-sm font-semibold text-gray-300">
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">
                   <input
                     type="checkbox"
                     checked={
@@ -326,51 +413,53 @@ export default function AccountManagement() {
                       selectedIndexes.length === cloudinaryAccounts.length
                     }
                     onChange={toggleSelectAll}
-                    className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-red-600"
+                    className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-900 accent-red-600"
                     aria-label="Select all Cloudinary accounts"
                   />
                 </th>
-                <th className="p-3 text-left text-sm font-semibold text-gray-300">Sr No</th>
-                <th className="p-3 text-left text-sm font-semibold text-gray-300">Cloud Name</th>
-                <th className="p-3 text-left text-sm font-semibold text-gray-300">API Key</th>
-                <th className="p-3 text-left text-sm font-semibold text-gray-300">API Secret</th>
-                <th className="p-3 text-left text-sm font-semibold text-gray-300">Actions</th>
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">Sr No</th>
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">Cloud Name</th>
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">API Key</th>
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">API Secret</th>
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">Date</th>
+                <th className="p-2 text-left text-xs font-semibold text-gray-300">Actions</th>
               </tr>
             </thead>
             <tbody>
               {cloudinaryAccounts.length > 0 ? (
                 cloudinaryAccounts.map((account, index) => (
                   <tr key={account.id || `${account.cloudName}-${index}`} className="border-t border-gray-700">
-                    <td className="p-3">
+                    <td className="p-2">
                       <input
                         type="checkbox"
                         checked={selectedIndexes.includes(index)}
                         onChange={() => toggleSelectedIndex(index)}
-                        className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-red-600"
+                        className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-900 accent-red-600"
                         aria-label={`Select Cloudinary account ${index + 1}`}
                       />
                     </td>
-                    <td className="p-3 font-semibold text-gray-300">{index + 1}</td>
-                    <td className="p-3 font-mono text-cyan-300">{account.cloudName || "N/A"}</td>
-                    <td className="p-3 font-mono text-blue-300">{account.apiKey || "N/A"}</td>
-                    <td className="break-all p-3 font-mono text-gray-300">{account.apiSecret || "N/A"}</td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
+                    <td className="p-2 text-xs font-semibold text-gray-300">{index + 1}</td>
+                    <td className="p-2 font-mono text-xs text-cyan-300">{account.cloudName || "N/A"}</td>
+                    <td className="p-2 font-mono text-xs text-blue-300">{account.apiKey || "N/A"}</td>
+                    <td className="break-all p-2 font-mono text-xs text-gray-300">{account.apiSecret || "N/A"}</td>
+                    <td className="p-2 text-xs text-gray-300">{formatDateTime(account.createdAt)}</td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => setViewAccount(account)}
-                          className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-2 text-blue-300 transition hover:bg-blue-600 hover:text-white"
+                          className="rounded-md border border-blue-500/40 bg-blue-500/10 p-1.5 text-blue-300 transition hover:bg-blue-600 hover:text-white"
                           title="View"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => openEditModal(account, index)}
-                          className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-amber-300 transition hover:bg-amber-600 hover:text-white"
+                          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-1.5 text-amber-300 transition hover:bg-amber-600 hover:text-white"
                           title="Edit"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
@@ -383,10 +472,10 @@ export default function AccountManagement() {
                               account,
                             })
                           }
-                          className="rounded-lg border border-red-500/40 bg-red-500/10 p-2 text-red-300 transition hover:bg-red-600 hover:text-white"
+                          className="rounded-md border border-red-500/40 bg-red-500/10 p-1.5 text-red-300 transition hover:bg-red-600 hover:text-white"
                           title="Delete"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </td>
@@ -394,7 +483,7 @@ export default function AccountManagement() {
                 ))
               ) : (
                 <tr className="border-t border-gray-700">
-                  <td colSpan="6" className="p-5 text-center text-sm text-gray-400">
+                  <td colSpan="7" className="p-5 text-center text-sm text-gray-400">
                     No Cloudinary account details added yet.
                   </td>
                 </tr>
@@ -509,6 +598,7 @@ export default function AccountManagement() {
                 ["Cloud Name", viewAccount.cloudName],
                 ["API Key", viewAccount.apiKey],
                 ["API Secret", viewAccount.apiSecret],
+                ["Date", formatDateTime(viewAccount.createdAt)],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-gray-700 bg-gray-800/70 p-3">
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>

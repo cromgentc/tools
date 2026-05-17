@@ -1,13 +1,56 @@
 import { useState } from "react";
+import axios from "axios";
 import toast from "react-hot-toast";
 import { API_ENDPOINTS } from "../config/api";
-import { FileText, Upload, CheckCircle } from "lucide-react";
+import { FileText, Upload, CheckCircle, Mail, Phone, Send } from "lucide-react";
 
 
-export default function AddScript() {
+export default function AddScript({ mode = "bulk" }) {
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
   const [excelFile, setExcelFile] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkResult, setBulkResult] = useState([]);
+
+  const showSingle = mode === "single";
+  const showBulk = mode === "bulk";
+
+  const handleAssign = async (e) => {
+    e.preventDefault();
+
+    if (!mobile || !email || !content) {
+      return toast.error("All fields are required");
+    }
+
+    if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
+      return toast.error("Enter valid 10-digit mobile number");
+    }
+
+    if (!email.includes("@")) {
+      return toast.error("Enter valid email address");
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await axios.post(API_ENDPOINTS.SCRIPT_ASSIGN, {
+        mobile,
+        email,
+        content,
+      });
+
+      toast.success(res.data.message || "Script assigned successfully");
+      setMobile("");
+      setEmail("");
+      setContent("");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Server error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ================= BULK =================
   const uploadExcelBulk = async () => {
@@ -45,14 +88,92 @@ export default function AddScript() {
 
   return (
     <div className="max-w-2xl mx-auto bg-gradient-to-br from-gray-800 to-gray-900 p-8 rounded-xl shadow-xl text-white border border-gray-700">
+      {showSingle && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-6">
+            <Send className="w-6 h-6 text-blue-400" />
+            <h2 className="text-2xl font-bold">Single Script Assign</h2>
+          </div>
+
+          <form onSubmit={handleAssign} className="space-y-4">
+            <div>
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-300">
+                <Phone className="w-4 h-4" />
+                Mobile Number
+              </label>
+              <input
+                className="w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter 10-digit mobile number"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-300">
+                <Mail className="w-4 h-4" />
+                Email Address
+              </label>
+              <input
+                type="email"
+                className="w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-300">
+                <FileText className="w-4 h-4" />
+                Script Content
+              </label>
+              <textarea
+                className="w-full resize-none rounded-lg border border-gray-600 bg-gray-700 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500"
+                placeholder="Write the script content here..."
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows="6"
+              />
+            </div>
+
+            <button
+              disabled={loading}
+              className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 font-semibold transition-all ${
+                loading ? "cursor-not-allowed bg-gray-600" : "bg-blue-600 hover:bg-blue-700 active:scale-95"
+              }`}
+            >
+              {loading ? (
+                <>
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <Send className="w-5 h-5" />
+                  Assign Script
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* BULK UPLOAD SECTION */}
-      <div className="mb-8">
+      {showBulk && <div className="mb-8">
         <div className="flex items-center gap-2 mb-6">
           <Upload className="w-6 h-6 text-green-400" />
-          <h3 className="text-2xl font-bold">Bulk Assign via Excel</h3>
+          <h3 className="text-2xl font-bold">Bulk Script Add</h3>
         </div>
 
         <div className="space-y-4">
+          <div className="rounded-lg border border-cyan-600/30 bg-cyan-900/10 p-3 text-xs text-cyan-100">
+            Excel columns: <span className="font-semibold">mobile</span>,{" "}
+            <span className="font-semibold">email</span>,{" "}
+            <span className="font-semibold">content</span>,{" "}
+            <span className="font-semibold">vendor</span>.
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
               <FileText className="w-4 h-4" />
@@ -94,10 +215,10 @@ export default function AddScript() {
             )}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* RESULTS */}
-      {bulkResult.length > 0 && (
+      {showBulk && bulkResult.length > 0 && (
         <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-lg border border-green-600/30">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="w-5 h-5 text-green-400" />
