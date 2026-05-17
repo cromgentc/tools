@@ -1,8 +1,23 @@
 import { v2 as cloudinary } from "cloudinary";
-import { getCloudinarySettings } from "../utils/adminSettings.js";
+import {
+  getCloudinarySettings,
+  getCloudinarySettingsFromDb,
+} from "../utils/adminSettings.js";
 
 export const configureCloudinary = () => {
   const settings = getCloudinarySettings();
+
+  cloudinary.config({
+    cloud_name: settings.cloudName,
+    api_key: settings.apiKey,
+    api_secret: settings.apiSecret,
+  });
+
+  return settings;
+};
+
+export const configureCloudinaryFromDb = async () => {
+  const settings = await getCloudinarySettingsFromDb();
 
   cloudinary.config({
     cloud_name: settings.cloudName,

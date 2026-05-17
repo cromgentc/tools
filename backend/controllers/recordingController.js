@@ -1,7 +1,7 @@
 import Recording from "../models/Recording.js";
 import Script from "../models/Script.js";
 import User from "../models/User.js";
-import cloudinary, { configureCloudinary } from "../config/cloudinary.js";
+import cloudinary, { configureCloudinaryFromDb } from "../config/cloudinary.js";
 import fs from "fs";
 import { PassThrough } from "stream";
 import xlsx from "xlsx";
@@ -107,7 +107,7 @@ export const uploadAllRecordings = async (req, res) => {
     let public_id;
     
     try {
-      const cloudinarySettings = configureCloudinary();
+      const cloudinarySettings = await configureCloudinaryFromDb();
 
       if (!cloudinarySettings.cloudName || !cloudinarySettings.apiKey || !cloudinarySettings.apiSecret) {
         throw new Error("Cloudinary settings are missing");

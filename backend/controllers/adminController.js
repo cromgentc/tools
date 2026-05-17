@@ -25,7 +25,10 @@ import {
   normalizeVendorName,
   resolveVendorAssignment,
 } from "../utils/vendor.js";
-import { readAdminSettings, saveAdminSettings } from "../utils/adminSettings.js";
+import {
+  readAdminSettingsFromDb,
+  saveAdminSettingsToDb,
+} from "../utils/adminSettings.js";
 
 const USER_ACCOUNT_STATUSES = new Set(["active", "inactive", "suspended"]);
 const USER_RECORDING_DOWNLOAD_CONCURRENCY = Number(
@@ -1631,7 +1634,7 @@ export const getStats = async (req, res) => {
 
 export const getAdminSettings = async (req, res) => {
   try {
-    const settings = readAdminSettings();
+    const settings = await readAdminSettingsFromDb();
 
     res.json({
       success: true,
@@ -1648,7 +1651,7 @@ export const getAdminSettings = async (req, res) => {
 
 export const updateAdminSettings = async (req, res) => {
   try {
-    const settings = saveAdminSettings(req.body || {});
+    const settings = await saveAdminSettingsToDb(req.body || {});
 
     res.json({
       success: true,

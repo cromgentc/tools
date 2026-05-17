@@ -191,6 +191,16 @@ export default function Settings() {
         throw new Error(data.message || "Failed to save Cloudinary settings");
       }
 
+      if (data.settings) {
+        const nextSettings = {
+          ...settings,
+          ...data.settings,
+        };
+
+        setSettings(nextSettings);
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+      }
+
       toast.success("Settings saved");
     } catch (err) {
       console.error("SAVE SETTINGS ERROR:", err);
