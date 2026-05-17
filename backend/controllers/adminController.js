@@ -1125,13 +1125,6 @@ export const updateUserDetails = async (req, res) => {
       });
     }
 
-    if (user.role === "admin") {
-      return res.status(400).json({
-        success: false,
-        message: "Admin users cannot be edited from this screen",
-      });
-    }
-
     const duplicateUser = await User.findOne({
       _id: { $ne: id },
       $or: [{ mobile }, { email }],

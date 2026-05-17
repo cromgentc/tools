@@ -30,13 +30,14 @@ import {
 import { API_ENDPOINTS } from "../config/api";
 
 export default function AdminDashboard() {
-  const currentUser = (() => {
+  const readCurrentUser = () => {
     try {
       return JSON.parse(localStorage.getItem("userInfo"));
     } catch {
       return null;
     }
-  })();
+  };
+  const [currentUser, setCurrentUser] = useState(readCurrentUser);
   const isAdminMode = currentUser?.role === "admin";
   const isVendorMode = currentUser?.role === "vendor";
   const [page, setPage] = useState("dashboard");
@@ -182,13 +183,16 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const refreshSettings = () => setAdminSettings(getAdminSettings());
+    const refreshCurrentUser = () => setCurrentUser(readCurrentUser());
 
     window.addEventListener("storage", refreshSettings);
+    window.addEventListener("storage", refreshCurrentUser);
     window.addEventListener("admin-settings-updated", refreshSettings);
     const interval = setInterval(refreshSettings, 1000);
 
     return () => {
       window.removeEventListener("storage", refreshSettings);
+      window.removeEventListener("storage", refreshCurrentUser);
       window.removeEventListener("admin-settings-updated", refreshSettings);
       clearInterval(interval);
     };
