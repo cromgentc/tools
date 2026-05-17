@@ -342,18 +342,18 @@ export default function RecordingPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white">
 
       {/* TOP BAR */}
-      <div className="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-gray-900 to-gray-800 shadow border-b border-gray-700">
-        <div>
-          <h1 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
+      <div className="flex flex-col gap-4 px-4 py-4 bg-gradient-to-r from-gray-900 to-gray-800 shadow border-b border-gray-700 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-blue-400 flex items-center gap-2 sm:text-2xl">
             <Mic className="w-6 h-6" />
             Recording Studio
           </h1>
 
-          <div className="flex items-center gap-3 text-gray-300 mt-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-3 text-gray-300 mt-2">
             <User className="w-4 h-4" />
-            <span className="font-semibold">{user?.name}</span>
+            <span className="break-all font-semibold">{user?.name}</span>
             <span className="text-gray-500">•</span>
-            <span className="font-mono text-green-400">{user?.mobile}</span>
+            <span className="break-all font-mono text-green-400">{user?.mobile}</span>
           </div>
         </div>
 
@@ -367,7 +367,7 @@ export default function RecordingPage() {
       </div>
 
       {/* MAIN */}
-      <div className="p-6 max-w-3xl mx-auto">
+      <div className="p-4 max-w-3xl mx-auto sm:p-6">
 
         {/* NO SCRIPT ASSIGNED */}
         {!scriptId && script.includes("🎉") && (
@@ -396,8 +396,13 @@ export default function RecordingPage() {
               <h2 className="text-xl font-bold text-blue-400 flex items-center gap-2"><FileText className="w-5 h-5" />Your Current Script</h2>
               {loading && <Loader className="w-4 h-4 animate-spin text-yellow-400" />}
             </div>
-            <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-600 min-h-24">
-              <p className="text-gray-100 leading-relaxed">{script}</p>
+            <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-600 min-h-24 overflow-hidden">
+              <p
+                className="whitespace-pre-wrap break-words text-gray-100 leading-relaxed"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                {script}
+              </p>
             </div>
           </div>
         )}
