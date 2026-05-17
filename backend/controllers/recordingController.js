@@ -3,6 +3,7 @@ import Script from "../models/Script.js";
 import User from "../models/User.js";
 import cloudinary from "../config/cloudinary.js";
 import fs from "fs";
+import xlsx from "xlsx";
 
 // =========================
 // UPLOAD RECORDING
@@ -246,6 +247,81 @@ export const getAllScriptsWithAudio = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: err.message || "Failed to fetch scripts" 
+    });
+  }
+};
+
+export const downloadScriptsExcel = async (req, res) => {
+  try {
+    const scripts = await Script.find()
+      .populate("userId", "name mobile email")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const recordings = await Recording.find()
+      .select("scriptId audioLink")
+      .lean();
+
+    const audioByScriptId = new Map(
+      recordings
+        .filter((recording) => recording.scriptId)
+        .map((recording) => [String(recording.scriptId), recording.audioLink])
+    );
+
+    const rows = scripts.map((script, index) => ({
+      "S.No": index + 1,
+      Mobile: script.mobile || script.userId?.mobile || "",
+      Email: script.email || script.userId?.email || "",
+      Content: script.content || "",
+      Status: script.status || "",
+      "Audio Link": script.audioLink || audioByScriptId.get(String(script._id)) || "",
+      "Created At": script.createdAt ? new Date(script.createdAt).toLocaleString("en-IN") : "",
+      "Completed At": script.completedAt ? new Date(script.completedAt).toLocaleString("en-IN") : "",
+    }));
+
+    const worksheet = xlsx.utils.json_to_sheet(rows, {
+      header: [
+        "S.No",
+        "Mobile",
+        "Email",
+        "Content",
+        "Status",
+        "Audio Link",
+        "Created At",
+        "Completed At",
+      ],
+    });
+
+    worksheet["!cols"] = [
+      { wch: 8 },
+      { wch: 16 },
+      { wch: 30 },
+      { wch: 80 },
+      { wch: 14 },
+      { wch: 60 },
+      { wch: 24 },
+      { wch: 24 },
+    ];
+
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, "Scripts");
+    const buffer = xlsx.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    const fileName = `scripts-mobile-email-content-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error("DOWNLOAD SCRIPTS EXCEL ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to download scripts Excel",
     });
   }
 };

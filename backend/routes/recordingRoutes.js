@@ -4,6 +4,7 @@ import path from "path";
 import {
   uploadAllRecordings,
   getAllScriptsWithAudio,
+  downloadScriptsExcel,
   getUserRecordings,
   getRecordingById,
   deleteRecording,
@@ -81,6 +82,7 @@ const handleUploadError = (req, res, next) => {
 
 router.post("/upload", handleUploadError, uploadAllRecordings);
 
+router.get("/scripts-with-audio/download-excel", downloadScriptsExcel);
 router.get("/scripts-with-audio", getAllScriptsWithAudio);
 router.get("/user/:userId", getUserRecordings);
 router.get("/:recordingId", getRecordingById);

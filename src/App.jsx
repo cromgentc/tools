@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./components/Login";
 import RecordingPage from "./components/Recording";
 import AdminDashboard from "./components/AdminDashboard";
+import UserDownloadPage from "./components/UserDownloadPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "react-hot-toast";
 
@@ -36,6 +37,15 @@ function App() {
           element={
             <ProtectedRoute role="vendor">
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/user-download/:userId"
+          element={
+            <ProtectedRoute role={["admin", "vendor"]}>
+              <UserDownloadPage />
             </ProtectedRoute>
           }
         />

@@ -94,6 +94,7 @@ export default function AllScripts() {
   const [scripts, setScripts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [excelDownloading, setExcelDownloading] = useState(false);
   const [backendStatus, setBackendStatus] = useState("checking");
   const navigate = useNavigate();
 
@@ -209,6 +210,40 @@ export default function AllScripts() {
     }
   };
 
+  const downloadScriptsExcel = async () => {
+    if (scripts.length === 0) {
+      toast.error("No scripts to download");
+      return;
+    }
+
+    try {
+      setExcelDownloading(true);
+      const response = await fetch(API_ENDPOINTS.RECORDING_SCRIPTS_EXCEL);
+
+      if (!response.ok) {
+        let errorMessage = "Excel download failed";
+
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // Ignore JSON parse errors and use the generic message.
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+      triggerBrowserDownload(blob, `scripts-mobile-email-content.xlsx`);
+      toast.success("Excel downloaded");
+    } catch (err) {
+      console.error("EXCEL DOWNLOAD ERROR:", err);
+      toast.error(err.message || "Excel download failed");
+    } finally {
+      setExcelDownloading(false);
+    }
+  };
+
   const completedCount = scripts.filter((script) => script.status === "completed").length;
   const pendingCount = scripts.filter((script) => script.status === "pending").length;
 
@@ -263,9 +298,9 @@ export default function AllScripts() {
       <div className="mb-6 flex flex-wrap gap-3">
         <button
           onClick={downloadAllAudio}
-          disabled={downloading || scripts.length === 0 || backendStatus === "error"}
+          disabled={downloading || excelDownloading || scripts.length === 0 || backendStatus === "error"}
           className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
-            downloading || scripts.length === 0 || backendStatus === "error"
+            downloading || excelDownloading || scripts.length === 0 || backendStatus === "error"
               ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
           }`}
@@ -279,6 +314,28 @@ export default function AllScripts() {
             <>
               <Download className="h-5 w-5" />
               Download All Audio
+            </>
+          )}
+        </button>
+
+        <button
+          onClick={downloadScriptsExcel}
+          disabled={excelDownloading || downloading || scripts.length === 0 || backendStatus === "error"}
+          className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
+            excelDownloading || downloading || scripts.length === 0 || backendStatus === "error"
+              ? "cursor-not-allowed bg-gray-600 opacity-60"
+              : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+          }`}
+        >
+          {excelDownloading ? (
+            <>
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Downloading...
+            </>
+          ) : (
+            <>
+              <Download className="h-5 w-5" />
+              Download Excel
             </>
           )}
         </button>

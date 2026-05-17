@@ -16,6 +16,7 @@ import {
   AlertCircle,
   RefreshCw,
   Building2,
+  Download,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
   const [page, setPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [excelDownloading, setExcelDownloading] = useState(false);
   const [backendStatus, setBackendStatus] = useState("checking");
   const [stats, setStats] = useState({
     totalScripts: 0,
@@ -121,6 +123,48 @@ export default function AdminDashboard() {
     navigate("/");
   };
 
+  const triggerBrowserDownload = (blob, fileName) => {
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(blobUrl);
+  };
+
+  const downloadScriptsExcel = async () => {
+    try {
+      setExcelDownloading(true);
+      const response = await fetch(API_ENDPOINTS.RECORDING_SCRIPTS_EXCEL);
+
+      if (!response.ok) {
+        let errorMessage = "Excel download failed";
+
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // Keep the generic message when the response is not JSON.
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+      triggerBrowserDownload(blob, "scripts-mobile-email-content.xlsx");
+      toast.success("Excel downloaded");
+    } catch (err) {
+      console.error("SIDEBAR EXCEL DOWNLOAD ERROR:", err);
+      toast.error(err.message || "Excel download failed");
+    } finally {
+      setExcelDownloading(false);
+    }
+  };
+
   // ================= MENU ITEM =================
   const menuItem = (key, label, icon) => (
     <button
@@ -154,6 +198,24 @@ export default function AdminDashboard() {
           {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
           {menuItem("addUser", "User Management", <Users className="w-5 h-5" />)}
           {isAdminMode && menuItem("all", "All Scripts", <Radio className="w-5 h-5" />)}
+          {isAdminMode && (
+            <button
+              onClick={downloadScriptsExcel}
+              disabled={excelDownloading || backendStatus === "error"}
+              className={`w-full px-4 py-3 rounded-lg transition flex items-center gap-3 ${
+                excelDownloading || backendStatus === "error"
+                  ? "cursor-not-allowed bg-gray-800 text-gray-500"
+                  : "bg-green-600/20 text-green-300 hover:bg-green-600 hover:text-white"
+              }`}
+            >
+              {excelDownloading ? (
+                <div className="w-5 h-5 animate-spin rounded-full border-2 border-green-200 border-t-transparent" />
+              ) : (
+                <Download className="w-5 h-5" />
+              )}
+              <span>{excelDownloading ? "Downloading..." : "Download Excel"}</span>
+            </button>
+          )}
         </div>
 
         <div className="p-4 border-t border-gray-800">

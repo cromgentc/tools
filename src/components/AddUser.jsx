@@ -1220,6 +1220,20 @@ export default function AddUser({ accessRole = "admin" }) {
   const allVisibleUsersSelected = users.length > 0 && selectedUserIds.length === users.length;
   const isDeletingAnyUser = deletingUserId !== null || deletingSelectedUsers;
   const isDeletingSelectedUser = selectedUser ? deletingUserId === selectedUser._id : false;
+  const getUserDownloadPageUrl = (user) => {
+    const path = `/user-download/${user._id}`;
+
+    if (isVendorMode && currentVendorId) {
+      return `${path}?vendorId=${encodeURIComponent(currentVendorId)}`;
+    }
+
+    return path;
+  };
+
+  const openUserDownloadPage = (event, user) => {
+    event.stopPropagation();
+    window.open(getUserDownloadPageUrl(user), "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 text-white">
@@ -1735,7 +1749,16 @@ export default function AddUser({ accessRole = "admin" }) {
                           <p className="text-xs text-gray-500">Joined {formatDateTime(user.createdAt)}</p>
                         </div>
                       </td>
-                      <td className="p-3 font-mono text-green-400">{user.mobile}</td>
+                      <td className="p-3">
+                        <button
+                          type="button"
+                          onClick={(e) => openUserDownloadPage(e, user)}
+                          className="font-mono text-green-400 underline-offset-4 transition hover:text-green-300 hover:underline"
+                          title="Open download page in new tab"
+                        >
+                          {user.mobile}
+                        </button>
+                      </td>
                       <td className="p-3 text-sm text-gray-300">{user.email}</td>
                       <td className="p-3 font-mono text-xs text-cyan-300">{user.vendorCode || "N/A"}</td>
                       <td className="p-3">

@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   // Recording endpoints
   RECORDING_UPLOAD: `${API_BASE_URL}/api/recording/upload`,
   RECORDING_SCRIPTS: `${API_BASE_URL}/api/recording/scripts-with-audio`,
+  RECORDING_SCRIPTS_EXCEL: `${API_BASE_URL}/api/recording/scripts-with-audio/download-excel`,
   RECORDING_BY_ID: (id) => `${API_BASE_URL}/api/recording/${id}`,
   USER_RECORDINGS: (userId) => `${API_BASE_URL}/api/recording/user/${userId}`,
   DELETE_RECORDING: (id) => `${API_BASE_URL}/api/recording/${id}`,
