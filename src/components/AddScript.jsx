@@ -1,57 +1,13 @@
 import { useState } from "react";
-import axios from "axios";
 import toast from "react-hot-toast";
 import { API_ENDPOINTS } from "../config/api";
-import { Mail, Phone, FileText, Upload, CheckCircle, Send } from "lucide-react";
+import { FileText, Upload, CheckCircle } from "lucide-react";
 
 
 export default function AddScript() {
-  const [mobile, setMobile] = useState("");
-  const [email, setEmail] = useState("");
-  const [content, setContent] = useState("");
-  const [loading, setLoading] = useState(false);
-
   const [excelFile, setExcelFile] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkResult, setBulkResult] = useState([]);
-
-  // ================= SINGLE ASSIGN =================
-  const handleAssign = async (e) => {
-    e.preventDefault();
-
-    if (!mobile || !email || !content) {
-      return toast.error("All fields are required");
-    }
-
-    if (mobile.length !== 10) {
-      return toast.error("Enter valid 10-digit mobile number");
-    }
-
-    if (!email.includes("@")) {
-      return toast.error("Enter valid email address");
-    }
-
-    try {
-      setLoading(true);
-
-      const res = await axios.post(API_ENDPOINTS.SCRIPT_ASSIGN, {
-        mobile,
-        email,
-        content,
-      });
-
-      toast.success(res.data.message || "Script assigned successfully");
-
-      setMobile("");
-      setEmail("");
-      setContent("");
-
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Server error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // ================= BULK =================
   const uploadExcelBulk = async () => {
@@ -89,86 +45,6 @@ export default function AddScript() {
 
   return (
     <div className="max-w-2xl mx-auto bg-gradient-to-br from-gray-800 to-gray-900 p-8 rounded-xl shadow-xl text-white border border-gray-700">
-
-      {/* SINGLE ASSIGN SECTION */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-6">
-          <Send className="w-6 h-6 text-blue-400" />
-          <h2 className="text-2xl font-bold">Assign Single Script</h2>
-        </div>
-
-        <form onSubmit={handleAssign} className="space-y-4">
-
-          {/* Mobile */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-              <Phone className="w-4 h-4" />
-              Mobile Number
-            </label>
-            <input
-              className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 transition"
-              placeholder="Enter 10-digit mobile number"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-              <Mail className="w-4 h-4" />
-              Email Address
-            </label>
-            <input
-              type="email"
-              className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 transition"
-              placeholder="Enter email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          {/* Script Content */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Script Content
-            </label>
-            <textarea
-              className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
-              placeholder="Write the script content here..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows="6"
-            />
-          </div>
-
-          <button
-            disabled={loading}
-            className={`w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-              loading
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 active:scale-95"
-            }`}
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                Assigning...
-              </>
-            ) : (
-              <>
-                <Send className="w-5 h-5" />
-                Assign Script
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-
-      {/* DIVIDER */}
-      <div className="border-t border-gray-600 my-8"></div>
-
       {/* BULK UPLOAD SECTION */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-6">

@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import AddScript from "./AddScript";
+import AccountManagement from "./AccountManagement";
 import AllScripts from "./AllScripts";
 import AddUser from "./AddUser";
 import AddVendor from "./AddVendor";
+import Profile from "./Profile";
 import Settings, { getAdminSettings } from "./Settings";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -19,9 +21,11 @@ import {
   Building2,
   Download,
   ChevronDown,
+  Cloud,
   UserPlus,
   Upload,
   Settings as SettingsIcon,
+  UserCircle,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -36,14 +40,18 @@ export default function AdminDashboard() {
   const isAdminMode = currentUser?.role === "admin";
   const isVendorMode = currentUser?.role === "vendor";
   const [page, setPage] = useState("dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= 768
+  );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userManagementMode, setUserManagementMode] = useState("");
   const [scriptMenuOpen, setScriptMenuOpen] = useState(false);
   const [scriptManagementMode, setScriptManagementMode] = useState("all");
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [scriptStatusFilter, setScriptStatusFilter] = useState("all");
   const [scriptAudioOnly, setScriptAudioOnly] = useState(false);
   const [adminSettings, setAdminSettings] = useState(getAdminSettings());
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [excelDownloading, setExcelDownloading] = useState(false);
   const [backendStatus, setBackendStatus] = useState("checking");
@@ -57,6 +65,21 @@ export default function AdminDashboard() {
   });
 
   const navigate = useNavigate();
+
+  const closeSidebarOnMobile = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => !prev);
+  };
+
+  const goToPage = (nextPage) => {
+    setPage(nextPage);
+    closeSidebarOnMobile();
+  };
 
   // ================= AUTH CHECK =================
   useEffect(() => {
@@ -216,8 +239,8 @@ export default function AdminDashboard() {
   // ================= MENU ITEM =================
   const menuItem = (key, label, icon) => (
     <button
-      onClick={() => setPage(key)}
-      className={`w-full px-4 py-3 rounded-lg cursor-pointer transition flex items-center gap-3 
+      onClick={() => goToPage(key)}
+      className={`w-full px-4 py-2.5 rounded-lg cursor-pointer transition flex items-center gap-3 text-sm
       ${page === key 
         ? "bg-blue-600 text-white font-semibold shadow-lg" 
         : "hover:bg-gray-800 text-gray-300 hover:text-white"}`}
@@ -231,6 +254,7 @@ export default function AdminDashboard() {
     setPage("addUser");
     setUserMenuOpen(true);
     setUserManagementMode(mode);
+    closeSidebarOnMobile();
   };
 
   const userManagementMenu = () => (
@@ -241,7 +265,7 @@ export default function AdminDashboard() {
           setUserManagementMode("");
           setUserMenuOpen((prev) => !prev);
         }}
-        className={`w-full px-4 py-3 rounded-lg cursor-pointer transition flex items-center gap-3 ${
+        className={`w-full px-4 py-2.5 rounded-lg cursor-pointer transition flex items-center gap-3 text-sm ${
           page === "addUser"
             ? "bg-blue-600 text-white font-semibold shadow-lg"
             : "hover:bg-gray-800 text-gray-300 hover:text-white"
@@ -257,7 +281,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={() => openUserManagementMode("single")}
-            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
               page === "addUser" && userManagementMode === "single"
                 ? "bg-blue-500/20 text-blue-200"
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
@@ -270,7 +294,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={() => openUserManagementMode("bulk")}
-            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
               page === "addUser" && userManagementMode === "bulk"
                 ? "bg-green-500/20 text-green-200"
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
@@ -290,6 +314,7 @@ export default function AdminDashboard() {
     setScriptManagementMode(mode);
     setScriptStatusFilter("all");
     setScriptAudioOnly(false);
+    closeSidebarOnMobile();
   };
 
   const openDashboardTarget = (target) => {
@@ -330,7 +355,7 @@ export default function AdminDashboard() {
           setPage("all");
           setScriptMenuOpen((prev) => !prev);
         }}
-        className={`w-full px-4 py-3 rounded-lg cursor-pointer transition flex items-center gap-3 ${
+        className={`w-full px-4 py-2.5 rounded-lg cursor-pointer transition flex items-center gap-3 text-sm ${
           page === "all"
             ? "bg-blue-600 text-white font-semibold shadow-lg"
             : "hover:bg-gray-800 text-gray-300 hover:text-white"
@@ -346,7 +371,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={() => openScriptManagementMode("vendor")}
-            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
               page === "all" && scriptManagementMode === "vendor"
                 ? "bg-cyan-500/20 text-cyan-200"
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
@@ -359,7 +384,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={() => openScriptManagementMode("user")}
-            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
               page === "all" && scriptManagementMode === "user"
                 ? "bg-purple-500/20 text-purple-200"
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
@@ -372,7 +397,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={() => openScriptManagementMode("all")}
-            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
               page === "all" && scriptManagementMode === "all"
                 ? "bg-orange-500/20 text-orange-200"
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
@@ -386,35 +411,112 @@ export default function AdminDashboard() {
     </div>
   );
 
+  const openAccountManagementMode = () => {
+    setPage("accountManagement");
+    setAccountMenuOpen(true);
+    closeSidebarOnMobile();
+  };
+
+  const accountManagementMenu = () => (
+    <div>
+      <button
+        type="button"
+        onClick={() => {
+          setPage("accountManagement");
+          setAccountMenuOpen((prev) => !prev);
+        }}
+        className={`w-full px-4 py-2.5 rounded-lg cursor-pointer transition flex items-center gap-3 text-sm ${
+          page === "accountManagement"
+            ? "bg-blue-600 text-white font-semibold shadow-lg"
+            : "hover:bg-gray-800 text-gray-300 hover:text-white"
+        }`}
+      >
+        <UserCircle className="w-5 h-5" />
+        <span className="flex-1 text-left">Account Management</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${accountMenuOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {accountMenuOpen && (
+        <div className="mt-2 space-y-1 pl-4">
+          <button
+            type="button"
+            onClick={openAccountManagementMode}
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
+              page === "accountManagement"
+                ? "bg-cyan-500/20 text-cyan-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Cloud className="w-4 h-4" />
+            Cloudinary Account
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar overlay"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-black/60 md:hidden"
+        />
+      )}
 
       {/* SIDEBAR */}
-      <div className={`${sidebarOpen ? "w-64" : "w-0"} bg-gradient-to-b from-gray-900 to-black border-r border-gray-800 flex flex-col transition-all duration-300 overflow-hidden`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-40 w-80 max-w-[90vw] bg-gradient-to-b from-gray-900 to-black border-r border-gray-800 flex flex-col transition-all duration-300 md:static md:z-auto md:max-w-none ${
+          sidebarOpen ? "translate-x-0 md:w-72" : "-translate-x-full md:w-0 md:translate-x-0 md:overflow-hidden md:border-r-0"
+        }`}
+      >
 
-        <div className="p-5 text-center border-b border-gray-800">
-          <h1 className="text-2xl font-bold text-blue-400 flex items-center justify-center gap-2">
-            {adminSettings.logoDataUrl ? (
-              <img src={adminSettings.logoDataUrl} alt="Logo" className="h-8 w-8 rounded object-contain" />
-            ) : (
-              <LayoutDashboard className="w-6 h-6" />
-            )}
-            {isVendorMode ? "Vendor" : "Admin"}
-          </h1>
+        <div className="flex items-center justify-between gap-3 border-b border-gray-800 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-500/30 bg-blue-500/10 p-1.5">
+              {adminSettings.logoDataUrl ? (
+                <img src={adminSettings.logoDataUrl} alt="Logo" className="h-full w-full rounded-lg object-contain" />
+              ) : (
+                <LayoutDashboard className="h-7 w-7 text-blue-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-white">
+                {isVendorMode ? "Vendor Panel" : "Admin Panel"}
+              </h1>
+              <p className="truncate text-xs font-semibold uppercase tracking-wide text-blue-300">
+                {isVendorMode ? "Vendor Access" : "Admin Access"}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-2 text-gray-300 hover:bg-gray-800 md:hidden"
+            aria-label="Close sidebar"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <div className="flex-1 p-4 space-y-2">
+        <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {isAdminMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
           {isAdminMode && menuItem("addScript", "Add Script", <FileText className="w-5 h-5" />)}
           {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
           {userManagementMenu()}
           {isAdminMode && scriptManagementMenu()}
+          {accountManagementMenu()}
           {isAdminMode && menuItem("settings", "Settings", <SettingsIcon className="w-5 h-5" />)}
           {isAdminMode && (
             <button
-              onClick={downloadScriptsExcel}
+              onClick={() => {
+                downloadScriptsExcel();
+                closeSidebarOnMobile();
+              }}
               disabled={excelDownloading || backendStatus === "error"}
-              className={`w-full px-4 py-3 rounded-lg transition flex items-center gap-3 ${
+              className={`w-full px-4 py-2.5 rounded-lg transition flex items-center gap-3 text-sm ${
                 excelDownloading || backendStatus === "error"
                   ? "cursor-not-allowed bg-gray-800 text-gray-500"
                   : "bg-green-600/20 text-green-300 hover:bg-green-600 hover:text-white"
@@ -443,61 +545,102 @@ export default function AdminDashboard() {
       </div>
 
       {/* MAIN */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex min-w-0 flex-col">
 
         {/* TOPBAR */}
-        <div className="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-800">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-800 bg-gradient-to-r from-gray-900 to-gray-800 px-3 py-3 md:px-6 md:py-4">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            type="button"
+            onClick={toggleSidebar}
             className="p-2 hover:bg-gray-700 rounded-lg transition"
+            aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+            aria-expanded={sidebarOpen}
           >
             {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
           
-          <h2 className="text-lg font-semibold capitalize flex items-center gap-2">
+          <h2 className="min-w-0 flex-1 justify-center text-center text-sm font-semibold capitalize flex items-center gap-2 md:text-lg">
             {page === "dashboard" && (
               <>
                 <LayoutDashboard className="w-5 h-5 text-blue-400" />
-                Dashboard
+                <span className="truncate">Dashboard</span>
               </>
             )}
             {page === "addScript" && (
               <>
                 <FileText className="w-5 h-5 text-green-400" />
-                Add Script
+                <span className="truncate">Add Script</span>
               </>
             )}
             {page === "addUser" && (
               <>
                 <Users className="w-5 h-5 text-purple-400" />
-                {isVendorMode ? "Vendor User Management" : "User Management"}
+                <span className="truncate">{isVendorMode ? "Vendor User Management" : "User Management"}</span>
               </>
             )}
             {isAdminMode && page === "vendors" && (
               <>
                 <Building2 className="w-5 h-5 text-cyan-400" />
-                Vendor Management
+                <span className="truncate">Vendor Management</span>
               </>
             )}
             {isAdminMode && page === "all" && (
               <>
                 <Radio className="w-5 h-5 text-orange-400" />
-                Script Management
+                <span className="truncate">Script Management</span>
               </>
             )}
             {isAdminMode && page === "settings" && (
               <>
                 <SettingsIcon className="w-5 h-5 text-blue-400" />
-                Settings
+                <span className="truncate">Settings</span>
+              </>
+            )}
+            {page === "accountManagement" && (
+              <>
+                <UserCircle className="w-5 h-5 text-blue-400" />
+                <span className="truncate">Account Management</span>
+              </>
+            )}
+            {page === "profile" && (
+              <>
+                <UserCircle className="w-5 h-5 text-blue-400" />
+                <span className="truncate">Profile</span>
               </>
             )}
           </h2>
 
-          <div className="w-6"></div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((prev) => !prev)}
+              className="flex max-w-[140px] items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-200 transition hover:border-blue-500 hover:text-white md:max-w-[220px]"
+            >
+              <UserCircle className="h-4 w-4 text-blue-300" />
+              <span className="truncate">{currentUser?.name || "Profile"}</span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${profileMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {profileMenuOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-gray-700 bg-gray-900 p-2 shadow-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPage("profile");
+                    setProfileMenuOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-300 transition hover:bg-gray-800 hover:text-white"
+                >
+                  <UserCircle className="h-4 w-4" />
+                  Profile
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* CONTENT */}
-        <div className="flex-1 p-6 overflow-auto">
+        <div className="flex-1 overflow-auto p-3 md:p-6">
 
           {/* DASHBOARD */}
           {isAdminMode && page === "dashboard" && (
@@ -514,8 +657,8 @@ export default function AdminDashboard() {
               )}
 
               {/* HEADER WITH REFRESH */}
-              <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-bold text-white">📊 Statistics Dashboard</h3>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-xl font-bold text-white md:text-2xl">Statistics Dashboard</h3>
                 <button
                   onClick={fetchStats}
                   disabled={loading}
@@ -531,7 +674,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* STAT CARDS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 {/* TOTAL SCRIPTS */}
                 <button
                   type="button"
@@ -776,6 +919,8 @@ export default function AdminDashboard() {
             />
           )}
           {isAdminMode && page === "settings" && <Settings />}
+          {page === "accountManagement" && <AccountManagement />}
+          {page === "profile" && <Profile />}
 
         </div>
       </div>

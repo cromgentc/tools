@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import {
   Building2,
   Clock3,
+  Eye,
   Loader,
   Pencil,
   RefreshCw,
@@ -42,6 +43,8 @@ export default function AddVendor() {
   const [editEmail, setEditEmail] = useState("");
   const [savingVendor, setSavingVendor] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
+  const [selectedVendorIds, setSelectedVendorIds] = useState([]);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [selectedVendorUsers, setSelectedVendorUsers] = useState(null);
   const [vendorUsersLoading, setVendorUsersLoading] = useState(false);
 
@@ -56,7 +59,11 @@ export default function AddVendor() {
         throw new Error(data.message || "Failed to fetch vendors");
       }
 
-      setVendors(Array.isArray(data.vendors) ? data.vendors : []);
+      const nextVendors = Array.isArray(data.vendors) ? data.vendors : [];
+      setVendors(nextVendors);
+      setSelectedVendorIds((prev) =>
+        prev.filter((vendorId) => nextVendors.some((vendor) => vendor._id === vendorId))
+      );
     } catch (err) {
       console.error("FETCH VENDORS ERROR:", err);
       toast.error(err.message || "Failed to load vendors");
@@ -146,14 +153,8 @@ export default function AddVendor() {
     }
   };
 
-  const handleDeleteVendor = async (vendor) => {
+  const deleteVendorById = async (vendor) => {
     if (!vendor?._id) return;
-
-    const confirmed = window.confirm(
-      `Delete vendor ${vendor.name}? Linked users will become unassigned.`
-    );
-
-    if (!confirmed) return;
 
     try {
       setDeletingVendorId(vendor._id);
@@ -169,6 +170,7 @@ export default function AddVendor() {
       }
 
       toast.success(data.message || "Vendor deleted successfully");
+      setSelectedVendorIds((prev) => prev.filter((vendorId) => vendorId !== vendor._id));
 
       if (editingVendor?._id === vendor._id) {
         closeEditVendor();
@@ -181,6 +183,70 @@ export default function AddVendor() {
     } finally {
       setDeletingVendorId(null);
     }
+  };
+
+  const requestDeleteVendor = (vendor) => {
+    setDeleteConfirm({
+      type: "single",
+      vendor,
+      title: "Delete Vendor",
+      message: `Delete vendor ${vendor.name}? Linked users will become unassigned.`,
+    });
+  };
+
+  const toggleVendorSelection = (vendorId) => {
+    setSelectedVendorIds((prev) =>
+      prev.includes(vendorId)
+        ? prev.filter((selectedId) => selectedId !== vendorId)
+        : [...prev, vendorId]
+    );
+  };
+
+  const toggleAllVendors = () => {
+    setSelectedVendorIds((prev) =>
+      prev.length === vendors.length ? [] : vendors.map((vendor) => vendor._id)
+    );
+  };
+
+  const requestDeleteSelectedVendors = () => {
+    if (selectedVendorIds.length === 0) {
+      toast.error("Please select vendors first");
+      return;
+    }
+
+    setDeleteConfirm({
+      type: "selected",
+      title: "Delete Selected Vendors",
+      message: `Delete selected ${selectedVendorIds.length} vendor(s)? Linked users will become unassigned.`,
+    });
+  };
+
+  const deleteSelectedVendors = async () => {
+    try {
+      const selectedSet = new Set(selectedVendorIds);
+      const selectedVendors = vendors.filter((vendor) => selectedSet.has(vendor._id));
+
+      for (const vendor of selectedVendors) {
+        await deleteVendorById(vendor);
+      }
+
+      setSelectedVendorIds([]);
+      toast.success("Selected vendors deleted");
+    } finally {
+      setDeleteConfirm(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+
+    if (deleteConfirm.type === "single") {
+      await deleteVendorById(deleteConfirm.vendor);
+      setDeleteConfirm(null);
+      return;
+    }
+
+    await deleteSelectedVendors();
   };
 
   const handleViewVendorUsers = async (vendor) => {
@@ -264,19 +330,34 @@ export default function AddVendor() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={toggleVendorsTable}
-            disabled={vendorsLoading}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
-              vendorsLoading
-                ? "cursor-not-allowed bg-gray-600"
-                : "bg-blue-600 hover:bg-blue-700 active:scale-95"
-            }`}
-          >
-            {showVendorsTable ? "Hide Registered Vendors" : "Show Registered Vendors"}
-            {vendors.length > 0 ? ` (${vendors.length})` : ""}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={requestDeleteSelectedVendors}
+              disabled={selectedVendorIds.length === 0 || vendorsLoading}
+              className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
+                selectedVendorIds.length === 0 || vendorsLoading
+                  ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                  : "bg-red-600 hover:bg-red-700 active:scale-95"
+              }`}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Selected
+            </button>
+            <button
+              type="button"
+              onClick={toggleVendorsTable}
+              disabled={vendorsLoading}
+              className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
+                vendorsLoading
+                  ? "cursor-not-allowed bg-gray-600"
+                  : "bg-blue-600 hover:bg-blue-700 active:scale-95"
+              }`}
+            >
+              {showVendorsTable ? "Hide Registered Vendors" : "Show Registered Vendors"}
+              {vendors.length > 0 ? ` (${vendors.length})` : ""}
+            </button>
+          </div>
         </div>
 
         {showVendorsTable && (
@@ -295,9 +376,19 @@ export default function AddVendor() {
 
             {!vendorsLoading && vendors.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/60">
-                <table className="w-full min-w-[860px]">
+                <table className="w-full min-w-[940px]">
                   <thead className="bg-gray-800/80">
                     <tr>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={vendors.length > 0 && selectedVendorIds.length === vendors.length}
+                          onChange={toggleAllVendors}
+                          className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-red-600"
+                          aria-label="Select all vendors"
+                        />
+                      </th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-300">Sr No</th>
                       <th className="p-3 text-left text-sm font-semibold text-gray-300">Vendor Name</th>
                       <th className="p-3 text-left text-sm font-semibold text-gray-300">Vendor Code</th>
                       <th className="p-3 text-left text-sm font-semibold text-gray-300">Mobile</th>
@@ -310,11 +401,21 @@ export default function AddVendor() {
                   </thead>
 
                   <tbody>
-                    {vendors.map((vendor) => (
+                    {vendors.map((vendor, index) => (
                       <tr
                         key={vendor._id}
                         className="border-t border-gray-800 bg-transparent transition hover:bg-gray-800/70"
                       >
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedVendorIds.includes(vendor._id)}
+                            onChange={() => toggleVendorSelection(vendor._id)}
+                            className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-red-600"
+                            aria-label={`Select vendor ${index + 1}`}
+                          />
+                        </td>
+                        <td className="p-3 font-semibold text-gray-300">{index + 1}</td>
                         <td className="p-3 font-semibold text-white">{vendor.name}</td>
                         <td className="p-3 font-mono text-sm text-cyan-300">{vendor.vendorCode}</td>
                         <td className="p-3 font-mono text-green-400">{vendor.mobile}</td>
@@ -341,38 +442,47 @@ export default function AddVendor() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              onClick={() => openEditVendor(vendor)}
+                              onClick={() => handleViewVendorUsers(vendor)}
                               disabled={savingVendor || deletingVendorId === vendor._id}
-                              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-all ${
+                              className={`inline-flex items-center justify-center rounded-md p-2 text-xs font-semibold transition-all ${
                                 savingVendor || deletingVendorId === vendor._id
                                   ? "cursor-not-allowed bg-gray-600 text-gray-200"
-                                  : "bg-amber-600 text-white hover:bg-amber-700 active:scale-95"
+                                  : "bg-blue-600 text-white hover:bg-blue-700 active:scale-95"
                               }`}
+                              title="View"
                             >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Edit
+                              <Eye className="h-4 w-4" />
                             </button>
 
                             <button
                               type="button"
-                              onClick={() => handleDeleteVendor(vendor)}
+                              onClick={() => openEditVendor(vendor)}
                               disabled={savingVendor || deletingVendorId === vendor._id}
-                              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-all ${
+                              className={`inline-flex items-center justify-center rounded-md p-2 text-xs font-semibold transition-all ${
+                                savingVendor || deletingVendorId === vendor._id
+                                  ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                                  : "bg-amber-600 text-white hover:bg-amber-700 active:scale-95"
+                              }`}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => requestDeleteVendor(vendor)}
+                              disabled={savingVendor || deletingVendorId === vendor._id}
+                              className={`inline-flex items-center justify-center rounded-md p-2 text-xs font-semibold transition-all ${
                                 savingVendor || deletingVendorId === vendor._id
                                   ? "cursor-not-allowed bg-gray-600 text-gray-200"
                                   : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
                               }`}
+                              title="Delete"
                             >
                               {deletingVendorId === vendor._id ? (
-                                <>
-                                  <Loader className="h-3.5 w-3.5 animate-spin" />
-                                  Deleting...
-                                </>
+                                <Loader className="h-4 w-4 animate-spin" />
                               ) : (
-                                <>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  Delete
-                                </>
+                                <Trash2 className="h-4 w-4" />
                               )}
                             </button>
                           </div>
@@ -474,6 +584,67 @@ export default function AddVendor() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-gray-900 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+                  <Trash2 className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-white">{deleteConfirm.title}</h3>
+                <p className="mt-2 text-sm text-gray-300">{deleteConfirm.message}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                disabled={Boolean(deletingVendorId)}
+                className="rounded-full bg-gray-800 p-2 text-gray-300 transition hover:bg-gray-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {deleteConfirm.vendor && (
+              <div className="mt-5 rounded-lg border border-gray-700 bg-gray-800/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Vendor</p>
+                <p className="mt-1 break-all text-sm font-semibold text-white">
+                  {deleteConfirm.vendor.name || "N/A"}
+                </p>
+                <p className="mt-1 font-mono text-xs text-cyan-300">
+                  {deleteConfirm.vendor.vendorCode || "N/A"}
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                disabled={Boolean(deletingVendorId)}
+                className="rounded-lg border border-gray-600 px-4 py-2 font-semibold text-gray-300 transition hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={Boolean(deletingVendorId)}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-700"
+              >
+                {deletingVendorId ? (
+                  <Loader className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

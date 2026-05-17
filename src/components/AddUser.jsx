@@ -10,6 +10,7 @@ import {
   Upload,
   CheckCircle,
   AlertCircle,
+  X,
   Building2,
   FileText,
   Trash2,
@@ -17,7 +18,9 @@ import {
   Clock3,
   Download,
   Activity,
+  Eye,
   Loader,
+  Pencil,
   RefreshCw,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
@@ -545,6 +548,11 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
   const [statusSaving, setStatusSaving] = useState(false);
   const [vendorSaving, setVendorSaving] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserEmail, setEditUserEmail] = useState("");
+  const [editUserMobile, setEditUserMobile] = useState("");
+  const [editUserSaving, setEditUserSaving] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [deletingSelectedUsers, setDeletingSelectedUsers] = useState(false);
   const [deletingAllRecordings, setDeletingAllRecordings] = useState(false);
@@ -1033,6 +1041,90 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
     }
   };
 
+  const openEditUserModal = (user) => {
+    setEditingUser(user);
+    setEditUserName(user?.name || "");
+    setEditUserEmail(user?.email || "");
+    setEditUserMobile(user?.mobile || "");
+  };
+
+  const closeEditUserModal = () => {
+    if (editUserSaving) return;
+
+    setEditingUser(null);
+    setEditUserName("");
+    setEditUserEmail("");
+    setEditUserMobile("");
+  };
+
+  const handleUpdateUserDetails = async (event) => {
+    event.preventDefault();
+
+    if (!editingUser?._id) {
+      toast.error("User not selected");
+      return;
+    }
+
+    const payload = {
+      name: editUserName.trim(),
+      email: editUserEmail.trim().toLowerCase(),
+      mobile: editUserMobile.trim(),
+    };
+
+    if (!payload.name || !payload.email || !payload.mobile) {
+      toast.error("Name, email and mobile are required");
+      return;
+    }
+
+    if (!payload.email.includes("@") || !payload.email.includes(".")) {
+      toast.error("Enter valid email address");
+      return;
+    }
+
+    if (!/^\d{10}$/.test(payload.mobile)) {
+      toast.error("Enter valid 10-digit mobile number");
+      return;
+    }
+
+    try {
+      setEditUserSaving(true);
+      const response = await fetch(API_ENDPOINTS.ADMIN_UPDATE_USER(editingUser._id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await readJsonSafe(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update user");
+      }
+
+      toast.success(data.message || "User updated successfully");
+      setUsers((prev) =>
+        prev.map((user) =>
+          user._id === editingUser._id
+            ? {
+                ...user,
+                ...payload,
+              }
+            : user
+        )
+      );
+
+      if (selectedUserId === editingUser._id) {
+        await fetchUserDetails(editingUser._id);
+      }
+
+      closeEditUserModal();
+      await fetchUsers();
+    } catch (err) {
+      console.error("UPDATE USER DETAILS ERROR:", err);
+      toast.error(err.message || "Failed to update user");
+    } finally {
+      setEditUserSaving(false);
+    }
+  };
+
   const deleteUserRecord = async (userToDelete, { skipConfirm = false } = {}) => {
     if (!userToDelete?._id) return;
 
@@ -1237,6 +1329,17 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
     window.open(getUserDownloadPageUrl(user), "_blank", "noopener,noreferrer");
   };
 
+  const openUserDetailsAction = (event, user) => {
+    event.stopPropagation();
+    fetchUserDetails(user._id);
+  };
+
+  const openUserEditAction = (event, user) => {
+    event.stopPropagation();
+    fetchUserDetails(user._id);
+    openEditUserModal(user);
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 text-white">
       <div className="rounded-xl border border-gray-700 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-5 shadow-xl">
@@ -1256,7 +1359,7 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
       </div>
 
       {showAddUserPanel && (
-      <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-6 shadow-xl">
+      <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-4 shadow-xl md:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-2xl font-bold">
@@ -1271,7 +1374,7 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
 
           <div className="mt-6 space-y-6">
         {addUserPanelMode === "single" && (
-        <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-8 shadow-xl">
+        <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-4 shadow-xl md:p-8">
           <div className="mb-6 flex items-center gap-2">
             <div className="rounded-full bg-blue-600 p-2">
               <UserPlus className="h-6 w-6" />
@@ -1452,7 +1555,7 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
         )}
 
         {addUserPanelMode === "bulk" && (
-        <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-8 shadow-xl">
+        <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-4 shadow-xl md:p-8">
           <div className="mb-6 flex items-center gap-2">
             <div className="rounded-full bg-green-600 p-2">
               <Upload className="h-6 w-6" />
@@ -1542,7 +1645,7 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
       )}
 
       {showAddUserPanel && addUserPanelMode === "bulk" && (bulkResult.inserted.length > 0 || bulkResult.errors.length > 0) && (
-        <div className="rounded-lg border border-gray-600 bg-gradient-to-br from-gray-700 to-gray-800 p-6">
+        <div className="rounded-lg border border-gray-600 bg-gradient-to-br from-gray-700 to-gray-800 p-4 md:p-6">
           <div className="mb-4 flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-400" />
             <h4 className="text-lg font-semibold text-white">Bulk Upload Results</h4>
@@ -1599,7 +1702,7 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
       )}
 
       {!showAddUserPanel && (
-      <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-6 shadow-xl">
+      <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-4 shadow-xl md:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-2xl font-bold">
@@ -1713,7 +1816,7 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Recordings</th>
                     <th className="p-3 text-left text-sm font-semibold text-gray-300">Last Active</th>
                     {!isVendorMode && (
-                      <th className="p-3 text-left text-sm font-semibold text-gray-300">Action</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-300">Actions</th>
                     )}
                   </tr>
                 </thead>
@@ -1796,31 +1899,56 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
                       <td className="p-3 text-sm text-gray-400">{formatDateTime(user.lastActiveAt)}</td>
                       {!isVendorMode && (
                         <td className="p-3">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteUserRecord(user);
-                            }}
-                            disabled={isDeletingAnyUser}
-                            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                              isDeletingAnyUser
-                                ? "cursor-not-allowed bg-gray-600 text-gray-200"
-                                : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
-                            }`}
-                          >
-                            {deletingUserId === user._id ? (
-                              <>
-                                <Loader className="h-3.5 w-3.5 animate-spin" />
-                                Deleting...
-                              </>
-                            ) : (
-                              <>
-                                <Trash2 className="h-3.5 w-3.5" />
-                                Delete
-                              </>
-                            )}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => openUserDetailsAction(e, user)}
+                              disabled={isDeletingAnyUser}
+                              className={`inline-flex items-center justify-center rounded-md p-2 text-xs font-semibold transition-all ${
+                                isDeletingAnyUser
+                                  ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                                  : "bg-blue-600 text-white hover:bg-blue-700 active:scale-95"
+                              }`}
+                              title="View"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => openUserEditAction(e, user)}
+                              disabled={isDeletingAnyUser}
+                              className={`inline-flex items-center justify-center rounded-md p-2 text-xs font-semibold transition-all ${
+                                isDeletingAnyUser
+                                  ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                                  : "bg-amber-600 text-white hover:bg-amber-700 active:scale-95"
+                              }`}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteUserRecord(user);
+                              }}
+                              disabled={isDeletingAnyUser}
+                              className={`inline-flex items-center justify-center rounded-md p-2 text-xs font-semibold transition-all ${
+                                isDeletingAnyUser
+                                  ? "cursor-not-allowed bg-gray-600 text-gray-200"
+                                  : "bg-red-600 text-white hover:bg-red-700 active:scale-95"
+                              }`}
+                              title="Delete"
+                            >
+                              {deletingUserId === user._id ? (
+                                <Loader className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -1835,8 +1963,99 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
               </div>
             )}
 
+            {editingUser && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+                <div className="w-full max-w-lg rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-2xl font-bold text-white">Edit User</h3>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Update user name, email and mobile number.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={closeEditUserModal}
+                      disabled={editUserSaving}
+                      className="rounded-full bg-gray-800 p-2 text-gray-300 transition hover:bg-gray-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleUpdateUserDetails} className="mt-6 space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Name</label>
+                      <input
+                        value={editUserName}
+                        onChange={(event) => setEditUserName(event.target.value)}
+                        className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500"
+                        placeholder="Enter name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Email</label>
+                      <input
+                        type="email"
+                        value={editUserEmail}
+                        onChange={(event) => setEditUserEmail(event.target.value)}
+                        className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500"
+                        placeholder="Enter email"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Mobile</label>
+                      <input
+                        type="tel"
+                        value={editUserMobile}
+                        onChange={(event) => setEditUserMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                        className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500"
+                        placeholder="Enter 10-digit mobile"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={closeEditUserModal}
+                        disabled={editUserSaving}
+                        className="rounded-lg border border-gray-600 px-4 py-3 font-semibold text-gray-200 transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={editUserSaving}
+                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-all ${
+                          editUserSaving
+                            ? "cursor-not-allowed bg-gray-600"
+                            : "bg-amber-600 hover:bg-amber-700 active:scale-95"
+                        }`}
+                      >
+                        {editUserSaving ? (
+                          <>
+                            <Loader className="h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Pencil className="h-4 w-4" />
+                            Save Changes
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {selectedUser && !detailLoading && (
-              <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-900 to-gray-800 p-6">
+              <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-900 to-gray-800 p-4 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h4 className="text-2xl font-bold text-white">{selectedUser.name}</h4>

@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
   ADMIN_UPDATE_VENDOR: (id) => `${API_BASE_URL}/api/admin/vendor/${id}`,
   ADMIN_BULK_ADD_VENDORS: `${API_BASE_URL}/api/admin/bulk-vendors`,
   ADMIN_USER_DETAILS: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
+  ADMIN_UPDATE_USER: (id) => `${API_BASE_URL}/api/admin/user/${id}`,
   ADMIN_USER_STATUS: (id) => `${API_BASE_URL}/api/admin/user/${id}/status`,
   ADMIN_USER_VENDOR: (id) => `${API_BASE_URL}/api/admin/user/${id}/vendor`,
   ADMIN_DELETE_USER_RECORDINGS: (id) => `${API_BASE_URL}/api/admin/user/${id}/recordings`,

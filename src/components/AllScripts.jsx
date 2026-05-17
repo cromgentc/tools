@@ -307,7 +307,7 @@ export default function AllScripts({ viewMode = "all", statusFilter = "all", aud
         : "All Script";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black p-6 text-white">
+    <div className="min-h-full bg-gradient-to-br from-gray-950 via-gray-900 to-black p-3 text-white md:p-6">
       {backendStatus === "error" && (
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-600/50 bg-red-900/20 p-4">
           <AlertCircle className="mt-0.5 h-6 w-6 flex-shrink-0 text-red-400" />
@@ -329,9 +329,9 @@ export default function AllScripts({ viewMode = "all", statusFilter = "all", aud
       )}
 
       <div className="mb-6">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-3xl font-bold text-blue-400">
-            <FileText className="h-8 w-8" />
+        <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-blue-400 md:text-3xl">
+            <FileText className="h-7 w-7 md:h-8 md:w-8" />
             {pageTitle}
           </h2>
           <div className="flex items-center gap-2">
@@ -354,11 +354,11 @@ export default function AllScripts({ viewMode = "all", statusFilter = "all", aud
         </p>
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-3">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap">
         <button
           onClick={downloadAllAudio}
           disabled={downloading || excelDownloading || visibleScripts.length === 0 || backendStatus === "error"}
-          className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
+          className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition-all active:scale-95 md:px-6 ${
             downloading || excelDownloading || visibleScripts.length === 0 || backendStatus === "error"
               ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
@@ -380,7 +380,7 @@ export default function AllScripts({ viewMode = "all", statusFilter = "all", aud
         <button
           onClick={downloadScriptsExcel}
           disabled={excelDownloading || downloading || visibleScripts.length === 0 || backendStatus === "error"}
-          className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
+          className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition-all active:scale-95 md:px-6 ${
             excelDownloading || downloading || visibleScripts.length === 0 || backendStatus === "error"
               ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
@@ -402,7 +402,7 @@ export default function AllScripts({ viewMode = "all", statusFilter = "all", aud
         <button
           onClick={load}
           disabled={loading}
-          className={`rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
+          className={`rounded-lg px-4 py-2 font-semibold transition-all active:scale-95 md:px-6 ${
             loading
               ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
@@ -440,7 +440,7 @@ export default function AllScripts({ viewMode = "all", statusFilter = "all", aud
 
       {!loading && visibleScripts.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800 shadow-xl">
-          <table className="w-full">
+          <table className="w-full min-w-[980px]">
             <thead className="sticky top-0 z-10 bg-gradient-to-r from-gray-700 to-gray-800">
               <tr>
                 <th className="border-b border-gray-600 p-3 text-left">Mobile</th>

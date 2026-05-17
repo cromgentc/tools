@@ -1079,6 +1079,119 @@ export const getUserDetails = async (req, res) => {
 };
 
 // =========================
+// UPDATE USER DETAILS
+// =========================
+export const updateUserDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const name = String(req.body?.name ?? "").trim();
+    const mobile = String(req.body?.mobile ?? "").trim();
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    if (!name || !mobile || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, mobile and email are required",
+      });
+    }
+
+    if (!/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: "Mobile must be 10 digits",
+      });
+    }
+
+    if (!email.includes("@") || !email.includes(".")) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email address",
+      });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({
+        success: false,
+        message: "Admin users cannot be edited from this screen",
+      });
+    }
+
+    const duplicateUser = await User.findOne({
+      _id: { $ne: id },
+      $or: [{ mobile }, { email }],
+    });
+
+    if (duplicateUser) {
+      return res.status(400).json({
+        success: false,
+        message:
+          duplicateUser.mobile === mobile
+            ? "Mobile number already registered"
+            : "Email already registered",
+      });
+    }
+
+    const previousMobile = user.mobile;
+    const previousEmail = user.email;
+
+    user.name = name;
+    user.mobile = mobile;
+    user.email = email;
+    await user.save();
+
+    await Script.updateMany(
+      {
+        $or: [{ userId: user._id }, { mobile: previousMobile }, { email: previousEmail }],
+      },
+      {
+        $set: {
+          mobile,
+          email,
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      message: "User updated successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        mobile: user.mobile,
+        email: user.email,
+        role: user.role,
+        vendorId: user.vendorId || null,
+        vendorName: user.vendorName,
+        vendorCode: user.vendorCode,
+        ...serializeUserActivity(user),
+      },
+    });
+  } catch (err) {
+    console.error("UPDATE USER DETAILS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to update user",
+    });
+  }
+};
+
+// =========================
 // UPDATE USER STATUS
 // =========================
 export const updateUserStatus = async (req, res) => {

@@ -160,6 +160,7 @@ export default function Settings() {
         }
 
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+        window.dispatchEvent(new Event("admin-settings-updated"));
 
         return nextSettings;
       });
@@ -213,7 +214,7 @@ export default function Settings() {
           <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </button>
 
-        {isOpen && <div className="border-t border-gray-800 p-6">{children}</div>}
+        {isOpen && <div className="border-t border-gray-800 p-4 md:p-6">{children}</div>}
       </section>
     );
   };
@@ -223,14 +224,14 @@ export default function Settings() {
       <div className="rounded-xl border border-gray-700 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-5 shadow-xl">
         <h2 className="text-2xl font-bold">Settings</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Manage branding, SEO details, and Cloudinary upload configuration.
+          Manage branding, SEO details, and Cloudinary account data.
         </p>
       </div>
 
       <div className="space-y-4">
         <Section id="branding" title="Logo, Favicon & SEO" icon={<Image className="h-5 w-5 text-blue-400" />}>
           <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">Logo</h4>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
               {settings.logoDataUrl ? (
                 <img src={settings.logoDataUrl} alt="Logo preview" className="h-full w-full object-contain" />
@@ -251,7 +252,7 @@ export default function Settings() {
             <Star className="h-4 w-4 text-yellow-400" />
             Favicon
           </h4>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
               {settings.faviconDataUrl ? (
                 <img src={settings.faviconDataUrl} alt="Favicon preview" className="h-full w-full object-contain" />
@@ -312,29 +313,45 @@ export default function Settings() {
           </div>
         </Section>
 
-        <Section id="cloudinary" title="Cloudinary API Upload" icon={<Cloud className="h-5 w-5 text-cyan-400" />}>
+        <Section id="cloudinary" title="Cloudinary Account" icon={<Cloud className="h-5 w-5 text-cyan-400" />}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <input
-              value={settings.cloudName}
-              onChange={(e) => updateField("cloudName", e.target.value)}
-              placeholder="CLOUD_NAME"
-              className="rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-            />
-            <input
-              value={settings.apiKey}
-              onChange={(e) => updateField("apiKey", e.target.value)}
-              placeholder="API_KEY"
-              className="rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-            />
-            <input
-              type="password"
-              value={settings.apiSecret}
-              onChange={(e) => updateField("apiSecret", e.target.value)}
-              placeholder="API_SECRET"
-              className="rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500 md:col-span-2"
-            />
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                CLOUD_NAME
+              </label>
+              <input
+                value={settings.cloudName}
+                onChange={(e) => updateField("cloudName", e.target.value)}
+                placeholder="CLOUD_NAME"
+                className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                API_KEY
+              </label>
+              <input
+                value={settings.apiKey}
+                onChange={(e) => updateField("apiKey", e.target.value)}
+                placeholder="API_KEY"
+                className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                API_SECRET
+              </label>
+              <input
+                type="password"
+                value={settings.apiSecret}
+                onChange={(e) => updateField("apiSecret", e.target.value)}
+                placeholder="API_SECRET"
+                className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
           </div>
         </Section>
+
       </div>
 
       <div className="flex justify-end">

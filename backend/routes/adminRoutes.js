@@ -17,6 +17,7 @@ import {
   getStats,
   getUserDetails,
   downloadAllUserRecordings,
+  updateUserDetails,
   updateUserStatus,
   updateAdminSettings,
   updateVendor,
@@ -79,6 +80,7 @@ router.post("/settings", updateAdminSettings);
 router.get("/users", getAllUsers);
 router.get("/user/:id/recordings/download", downloadAllUserRecordings);
 router.get("/user/:id", getUserDetails);
+router.patch("/user/:id", updateUserDetails);
 router.patch("/user/:id/status", updateUserStatus);
 router.patch("/user/:id/vendor", updateUserVendor);
 router.delete("/user/:id/recordings", deleteAllUserRecordings);
