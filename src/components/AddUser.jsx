@@ -2275,12 +2275,15 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
                       {selectedUser.recordings.map((recording, index) => (
                         <div
                           key={recording._id}
-                          className="rounded-lg border border-gray-700 bg-gray-800/70 p-4"
+                          className="min-w-0 rounded-lg border border-gray-700 bg-gray-800/70 p-4"
                         >
                           <p className="text-xs uppercase tracking-wide text-gray-500">
                             Uploaded {formatDateTime(recording.uploadedAt)}
                           </p>
-                          <p className="mt-2 text-sm text-gray-300">
+                          <p
+                            className="mt-2 whitespace-pre-wrap break-words text-sm text-gray-300"
+                            style={{ overflowWrap: "anywhere" }}
+                          >
                             {truncateText(recording.script?.content || "No linked script")}
                           </p>
 
@@ -2355,10 +2358,15 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
                         return (
                           <div
                             key={script._id}
-                            className="rounded-lg border border-gray-700 bg-gray-800/70 p-4"
+                            className="min-w-0 rounded-lg border border-gray-700 bg-gray-800/70 p-4"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-sm text-gray-300">{truncateText(script.content)}</p>
+                            <div className="flex min-w-0 items-start justify-between gap-3">
+                              <p
+                                className="min-w-0 whitespace-pre-wrap break-words text-sm text-gray-300"
+                                style={{ overflowWrap: "anywhere" }}
+                              >
+                                {truncateText(script.content)}
+                              </p>
                               <span
                                 className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
                                   script.status === "completed"

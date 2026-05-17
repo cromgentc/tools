@@ -775,8 +775,8 @@ export default function UserDownloadPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-            <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-5">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <div className="min-w-0 rounded-lg border border-gray-800 bg-gray-900/60 p-5">
               <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
                 <Radio className="h-5 w-5 text-orange-400" />
                 Recordings ({user.recordings.length})
@@ -790,12 +790,15 @@ export default function UserDownloadPage() {
                 {user.recordings.map((recording, index) => (
                   <div
                     key={recording._id}
-                    className="rounded-lg border border-gray-700 bg-gray-800/70 p-4"
+                    className="min-w-0 rounded-lg border border-gray-700 bg-gray-800/70 p-4"
                   >
                     <p className="text-xs uppercase tracking-wide text-gray-500">
                       Uploaded {formatDateTime(recording.uploadedAt)}
                     </p>
-                    <p className="mt-2 text-sm text-gray-300">
+                    <p
+                      className="mt-2 whitespace-pre-wrap break-words text-sm text-gray-300"
+                      style={{ overflowWrap: "anywhere" }}
+                    >
                       {truncateText(recording.script?.content || "No linked script")}
                     </p>
                     <p className="mt-2 break-all font-mono text-sm text-cyan-200">
@@ -832,7 +835,7 @@ export default function UserDownloadPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-5">
+            <div className="min-w-0 rounded-lg border border-gray-800 bg-gray-900/60 p-5">
               <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
                 <FileText className="h-5 w-5 text-cyan-400" />
                 Assigned Scripts ({user.scripts.length})
@@ -844,9 +847,14 @@ export default function UserDownloadPage() {
                 )}
 
                 {user.scripts.map((script) => (
-                  <div key={script._id} className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                      <p className="text-sm text-gray-200">{script.content || "No content"}</p>
+                  <div key={script._id} className="min-w-0 rounded-lg border border-gray-700 bg-gray-800/60 p-4">
+                    <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <p
+                        className="min-w-0 whitespace-pre-wrap break-words text-sm text-gray-200"
+                        style={{ overflowWrap: "anywhere" }}
+                      >
+                        {script.content || "No content"}
+                      </p>
                       <span className="inline-flex w-fit rounded-full border border-gray-600 px-3 py-1 text-xs font-semibold text-gray-300">
                         {script.status || "pending"}
                       </span>
