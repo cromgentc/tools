@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
@@ -90,7 +90,43 @@ export const convertAndDownload = async ({ file, audioUrl, format }) => {
   }
 };
 
-export default function AllScripts() {
+const getScriptUserLabel = (script) => {
+  const name = script.userName || script.userId?.name || "";
+  const mobile = script.mobile || script.userId?.mobile || "N/A";
+
+  return name ? `${name} (${mobile})` : mobile;
+};
+
+const getScriptVendorLabel = (script) => {
+  const vendorName = script.vendorName || script.userId?.vendorName || "Unassigned Vendor";
+  const vendorCode = script.vendorCode || script.userId?.vendorCode || "N/A";
+
+  return `${vendorName} (${vendorCode})`;
+};
+
+const groupScripts = (items, viewMode) => {
+  if (viewMode === "all") {
+    return [{ key: "all", title: "All Script", scripts: items }];
+  }
+
+  const getLabel = viewMode === "vendor" ? getScriptVendorLabel : getScriptUserLabel;
+  const groups = new Map();
+
+  for (const script of items) {
+    const label = getLabel(script);
+    groups.set(label, [...(groups.get(label) || []), script]);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([title, groupedScripts]) => ({
+      key: title,
+      title,
+      scripts: groupedScripts,
+    }));
+};
+
+export default function AllScripts({ viewMode = "all", statusFilter = "all", audioOnly = false }) {
   const [scripts, setScripts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -181,7 +217,13 @@ export default function AllScripts() {
   };
 
   const downloadAllAudio = async () => {
-    const audioScripts = scripts.filter((script) => script.audioLink);
+    const sourceScripts = scripts.filter((script) => {
+      const statusMatches = statusFilter === "all" || script.status === statusFilter;
+      const audioMatches = !audioOnly || Boolean(script.audioLink);
+
+      return statusMatches && audioMatches;
+    });
+    const audioScripts = sourceScripts.filter((script) => script.audioLink);
 
     if (audioScripts.length === 0) {
       toast.error("No audio files to download");
@@ -244,8 +286,25 @@ export default function AllScripts() {
     }
   };
 
-  const completedCount = scripts.filter((script) => script.status === "completed").length;
-  const pendingCount = scripts.filter((script) => script.status === "pending").length;
+  const visibleScripts = scripts.filter((script) => {
+    const statusMatches = statusFilter === "all" || script.status === statusFilter;
+    const audioMatches = !audioOnly || Boolean(script.audioLink);
+
+    return statusMatches && audioMatches;
+  });
+  const completedCount = visibleScripts.filter((script) => script.status === "completed").length;
+  const pendingCount = visibleScripts.filter((script) => script.status === "pending").length;
+  const groupedScripts = groupScripts(visibleScripts, viewMode);
+  const pageTitle =
+    audioOnly
+      ? "Total Recordings"
+      : statusFilter === "completed"
+        ? "Completed Scripts"
+        : viewMode === "vendor"
+      ? "Vendor Wise Scripts"
+      : viewMode === "user"
+        ? "User Wise Scripts"
+        : "All Script";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black p-6 text-white">
@@ -273,7 +332,7 @@ export default function AllScripts() {
         <div className="mb-2 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-3xl font-bold text-blue-400">
             <FileText className="h-8 w-8" />
-            Scripts & Recordings Dashboard
+            {pageTitle}
           </h2>
           <div className="flex items-center gap-2">
             <div
@@ -287,7 +346,7 @@ export default function AllScripts() {
           </div>
         </div>
         <p className="text-gray-400">
-          Total recordings: <span className="font-semibold text-green-400">{scripts.length}</span>
+          Total scripts: <span className="font-semibold text-green-400">{visibleScripts.length}</span>
           {" • "}
           Completed: <span className="font-semibold text-blue-400">{completedCount}</span>
           {" • "}
@@ -298,9 +357,9 @@ export default function AllScripts() {
       <div className="mb-6 flex flex-wrap gap-3">
         <button
           onClick={downloadAllAudio}
-          disabled={downloading || excelDownloading || scripts.length === 0 || backendStatus === "error"}
+          disabled={downloading || excelDownloading || visibleScripts.length === 0 || backendStatus === "error"}
           className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
-            downloading || excelDownloading || scripts.length === 0 || backendStatus === "error"
+            downloading || excelDownloading || visibleScripts.length === 0 || backendStatus === "error"
               ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
           }`}
@@ -320,9 +379,9 @@ export default function AllScripts() {
 
         <button
           onClick={downloadScriptsExcel}
-          disabled={excelDownloading || downloading || scripts.length === 0 || backendStatus === "error"}
+          disabled={excelDownloading || downloading || visibleScripts.length === 0 || backendStatus === "error"}
           className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold transition-all active:scale-95 ${
-            excelDownloading || downloading || scripts.length === 0 || backendStatus === "error"
+            excelDownloading || downloading || visibleScripts.length === 0 || backendStatus === "error"
               ? "cursor-not-allowed bg-gray-600 opacity-60"
               : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
           }`}
@@ -366,7 +425,7 @@ export default function AllScripts() {
         </div>
       )}
 
-      {!loading && scripts.length === 0 && (
+      {!loading && visibleScripts.length === 0 && (
         <div className="rounded-lg border border-gray-700 bg-gray-800 p-12 text-center">
           <FileText className="mx-auto mb-4 h-16 w-16 text-gray-500" />
           <p className="text-lg text-gray-400">No scripts found</p>
@@ -379,7 +438,7 @@ export default function AllScripts() {
         </div>
       )}
 
-      {!loading && scripts.length > 0 && (
+      {!loading && visibleScripts.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800 shadow-xl">
           <table className="w-full">
             <thead className="sticky top-0 z-10 bg-gradient-to-r from-gray-700 to-gray-800">
@@ -395,7 +454,20 @@ export default function AllScripts() {
             </thead>
 
             <tbody>
-              {scripts.map((script) => (
+              {groupedScripts.map((group) => (
+                <Fragment key={group.key}>
+                  {viewMode !== "all" && (
+                    <tr key={`${group.key}-header`} className="bg-gray-900/80">
+                      <td colSpan={7} className="border-b border-gray-700 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold text-cyan-300">{group.title}</span>
+                          <span className="text-xs text-gray-400">{group.scripts.length} script(s)</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {group.scripts.map((script) => (
                 <tr
                   key={script._id}
                   className="border-b border-gray-700 transition-colors hover:bg-gray-700"
@@ -477,6 +549,8 @@ export default function AllScripts() {
                     </button>
                   </td>
                 </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

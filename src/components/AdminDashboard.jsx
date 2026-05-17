@@ -3,6 +3,7 @@ import AddScript from "./AddScript";
 import AllScripts from "./AllScripts";
 import AddUser from "./AddUser";
 import AddVendor from "./AddVendor";
+import Settings, { getAdminSettings } from "./Settings";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
@@ -17,6 +18,10 @@ import {
   RefreshCw,
   Building2,
   Download,
+  ChevronDown,
+  UserPlus,
+  Upload,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -32,6 +37,13 @@ export default function AdminDashboard() {
   const isVendorMode = currentUser?.role === "vendor";
   const [page, setPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [userManagementMode, setUserManagementMode] = useState("");
+  const [scriptMenuOpen, setScriptMenuOpen] = useState(false);
+  const [scriptManagementMode, setScriptManagementMode] = useState("all");
+  const [scriptStatusFilter, setScriptStatusFilter] = useState("all");
+  const [scriptAudioOnly, setScriptAudioOnly] = useState(false);
+  const [adminSettings, setAdminSettings] = useState(getAdminSettings());
   const [loading, setLoading] = useState(false);
   const [excelDownloading, setExcelDownloading] = useState(false);
   const [backendStatus, setBackendStatus] = useState("checking");
@@ -58,6 +70,28 @@ export default function AdminDashboard() {
 
     if (user.role === "vendor") {
       setPage("addUser");
+      setUserMenuOpen(true);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const section = params.get("section");
+
+    if (section === "users") {
+      setPage("addUser");
+      setUserMenuOpen(true);
+      setUserManagementMode("");
+    }
+
+    if (section === "vendors" && user.role === "admin") {
+      setPage("vendors");
+    }
+
+    if (section === "scripts" && user.role === "admin") {
+      setPage("all");
+      setScriptMenuOpen(true);
+      setScriptManagementMode(params.get("scriptMode") || "all");
+      setScriptStatusFilter(params.get("status") || "all");
+      setScriptAudioOnly(params.get("audioOnly") === "true");
     }
   }, [navigate]);
 
@@ -123,6 +157,20 @@ export default function AdminDashboard() {
     navigate("/");
   };
 
+  useEffect(() => {
+    const refreshSettings = () => setAdminSettings(getAdminSettings());
+
+    window.addEventListener("storage", refreshSettings);
+    window.addEventListener("admin-settings-updated", refreshSettings);
+    const interval = setInterval(refreshSettings, 1000);
+
+    return () => {
+      window.removeEventListener("storage", refreshSettings);
+      window.removeEventListener("admin-settings-updated", refreshSettings);
+      clearInterval(interval);
+    };
+  }, []);
+
   const triggerBrowserDownload = (blob, fileName) => {
     const blobUrl = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -179,6 +227,165 @@ export default function AdminDashboard() {
     </button>
   );
 
+  const openUserManagementMode = (mode) => {
+    setPage("addUser");
+    setUserMenuOpen(true);
+    setUserManagementMode(mode);
+  };
+
+  const userManagementMenu = () => (
+    <div>
+      <button
+        onClick={() => {
+          setPage("addUser");
+          setUserManagementMode("");
+          setUserMenuOpen((prev) => !prev);
+        }}
+        className={`w-full px-4 py-3 rounded-lg cursor-pointer transition flex items-center gap-3 ${
+          page === "addUser"
+            ? "bg-blue-600 text-white font-semibold shadow-lg"
+            : "hover:bg-gray-800 text-gray-300 hover:text-white"
+        }`}
+      >
+        <Users className="w-5 h-5" />
+        <span className="flex-1 text-left">User Management</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {userMenuOpen && (
+        <div className="mt-2 space-y-1 pl-4">
+          <button
+            type="button"
+            onClick={() => openUserManagementMode("single")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+              page === "addUser" && userManagementMode === "single"
+                ? "bg-blue-500/20 text-blue-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            Add New User
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openUserManagementMode("bulk")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+              page === "addUser" && userManagementMode === "bulk"
+                ? "bg-green-500/20 text-green-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            Bulk Add Users
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const openScriptManagementMode = (mode) => {
+    setPage("all");
+    setScriptMenuOpen(true);
+    setScriptManagementMode(mode);
+    setScriptStatusFilter("all");
+    setScriptAudioOnly(false);
+  };
+
+  const openDashboardTarget = (target) => {
+    const url = new URL("/admin-dashboard", window.location.origin);
+
+    if (target === "scripts") {
+      url.searchParams.set("section", "scripts");
+      url.searchParams.set("scriptMode", "all");
+    }
+
+    if (target === "users") {
+      url.searchParams.set("section", "users");
+    }
+
+    if (target === "vendors") {
+      url.searchParams.set("section", "vendors");
+    }
+
+    if (target === "recordings") {
+      url.searchParams.set("section", "scripts");
+      url.searchParams.set("scriptMode", "all");
+      url.searchParams.set("audioOnly", "true");
+    }
+
+    if (target === "completed") {
+      url.searchParams.set("section", "scripts");
+      url.searchParams.set("scriptMode", "all");
+      url.searchParams.set("status", "completed");
+    }
+
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  };
+
+  const scriptManagementMenu = () => (
+    <div>
+      <button
+        onClick={() => {
+          setPage("all");
+          setScriptMenuOpen((prev) => !prev);
+        }}
+        className={`w-full px-4 py-3 rounded-lg cursor-pointer transition flex items-center gap-3 ${
+          page === "all"
+            ? "bg-blue-600 text-white font-semibold shadow-lg"
+            : "hover:bg-gray-800 text-gray-300 hover:text-white"
+        }`}
+      >
+        <Radio className="w-5 h-5" />
+        <span className="flex-1 text-left">Script Management</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${scriptMenuOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {scriptMenuOpen && (
+        <div className="mt-2 space-y-1 pl-4">
+          <button
+            type="button"
+            onClick={() => openScriptManagementMode("vendor")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+              page === "all" && scriptManagementMode === "vendor"
+                ? "bg-cyan-500/20 text-cyan-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            Vendor Wise
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openScriptManagementMode("user")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+              page === "all" && scriptManagementMode === "user"
+                ? "bg-purple-500/20 text-purple-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            User Wise
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openScriptManagementMode("all")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-sm transition flex items-center gap-2 ${
+              page === "all" && scriptManagementMode === "all"
+                ? "bg-orange-500/20 text-orange-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            All Script
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
 
@@ -187,7 +394,11 @@ export default function AdminDashboard() {
 
         <div className="p-5 text-center border-b border-gray-800">
           <h1 className="text-2xl font-bold text-blue-400 flex items-center justify-center gap-2">
-            <LayoutDashboard className="w-6 h-6" />
+            {adminSettings.logoDataUrl ? (
+              <img src={adminSettings.logoDataUrl} alt="Logo" className="h-8 w-8 rounded object-contain" />
+            ) : (
+              <LayoutDashboard className="w-6 h-6" />
+            )}
             {isVendorMode ? "Vendor" : "Admin"}
           </h1>
         </div>
@@ -196,8 +407,9 @@ export default function AdminDashboard() {
           {isAdminMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
           {isAdminMode && menuItem("addScript", "Add Script", <FileText className="w-5 h-5" />)}
           {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
-          {menuItem("addUser", "User Management", <Users className="w-5 h-5" />)}
-          {isAdminMode && menuItem("all", "All Scripts", <Radio className="w-5 h-5" />)}
+          {userManagementMenu()}
+          {isAdminMode && scriptManagementMenu()}
+          {isAdminMode && menuItem("settings", "Settings", <SettingsIcon className="w-5 h-5" />)}
           {isAdminMode && (
             <button
               onClick={downloadScriptsExcel}
@@ -270,7 +482,13 @@ export default function AdminDashboard() {
             {isAdminMode && page === "all" && (
               <>
                 <Radio className="w-5 h-5 text-orange-400" />
-                All Scripts
+                Script Management
+              </>
+            )}
+            {isAdminMode && page === "settings" && (
+              <>
+                <SettingsIcon className="w-5 h-5 text-blue-400" />
+                Settings
               </>
             )}
           </h2>
@@ -315,7 +533,11 @@ export default function AdminDashboard() {
               {/* STAT CARDS GRID */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {/* TOTAL SCRIPTS */}
-                <div className="bg-gradient-to-br from-blue-900/30 to-blue-900/10 border border-blue-600/30 p-6 rounded-xl hover:shadow-lg transition">
+                <button
+                  type="button"
+                  onClick={() => openDashboardTarget("scripts")}
+                  className="bg-gradient-to-br from-blue-900/30 to-blue-900/10 border border-blue-600/30 p-6 rounded-xl text-left hover:shadow-lg hover:border-blue-400 transition active:scale-95"
+                >
                   <div className="flex items-end justify-between mb-2">
                     <div>
                       <h3 className="text-gray-400 text-xs uppercase tracking-wide mb-1">Total Scripts</h3>
@@ -329,10 +551,14 @@ export default function AdminDashboard() {
                       style={{ width: `${Math.min((stats.totalScripts || 0) * 10, 100)}%` }}
                     ></div>
                   </div>
-                </div>
+                </button>
 
                 {/* TOTAL USERS */}
-                <div className="bg-gradient-to-br from-green-900/30 to-green-900/10 border border-green-600/30 p-6 rounded-xl hover:shadow-lg transition">
+                <button
+                  type="button"
+                  onClick={() => openDashboardTarget("users")}
+                  className="bg-gradient-to-br from-green-900/30 to-green-900/10 border border-green-600/30 p-6 rounded-xl text-left hover:shadow-lg hover:border-green-400 transition active:scale-95"
+                >
                   <div className="flex items-end justify-between mb-2">
                     <div>
                       <h3 className="text-gray-400 text-xs uppercase tracking-wide mb-1">Total Users</h3>
@@ -346,10 +572,14 @@ export default function AdminDashboard() {
                       style={{ width: `${Math.min((stats.totalUsers || 0) * 10, 100)}%` }}
                     ></div>
                   </div>
-                </div>
+                </button>
 
                 {/* TOTAL VENDORS */}
-                <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-900/10 border border-cyan-600/30 p-6 rounded-xl hover:shadow-lg transition">
+                <button
+                  type="button"
+                  onClick={() => openDashboardTarget("vendors")}
+                  className="bg-gradient-to-br from-cyan-900/30 to-cyan-900/10 border border-cyan-600/30 p-6 rounded-xl text-left hover:shadow-lg hover:border-cyan-400 transition active:scale-95"
+                >
                   <div className="flex items-end justify-between mb-2">
                     <div>
                       <h3 className="text-gray-400 text-xs uppercase tracking-wide mb-1">Vendor Registered</h3>
@@ -363,10 +593,14 @@ export default function AdminDashboard() {
                       style={{ width: `${Math.min((stats.totalVendors || 0) * 10, 100)}%` }}
                     ></div>
                   </div>
-                </div>
+                </button>
 
                 {/* TOTAL RECORDINGS */}
-                <div className="bg-gradient-to-br from-orange-900/30 to-orange-900/10 border border-orange-600/30 p-6 rounded-xl hover:shadow-lg transition">
+                <button
+                  type="button"
+                  onClick={() => openDashboardTarget("recordings")}
+                  className="bg-gradient-to-br from-orange-900/30 to-orange-900/10 border border-orange-600/30 p-6 rounded-xl text-left hover:shadow-lg hover:border-orange-400 transition active:scale-95"
+                >
                   <div className="flex items-end justify-between mb-2">
                     <div>
                       <h3 className="text-gray-400 text-xs uppercase tracking-wide mb-1">Total Recordings</h3>
@@ -380,10 +614,14 @@ export default function AdminDashboard() {
                       style={{ width: `${Math.min((stats.totalRecordings || 0) * 10, 100)}%` }}
                     ></div>
                   </div>
-                </div>
+                </button>
 
                 {/* COMPLETED RECORDINGS */}
-                <div className="bg-gradient-to-br from-purple-900/30 to-purple-900/10 border border-purple-600/30 p-6 rounded-xl hover:shadow-lg transition">
+                <button
+                  type="button"
+                  onClick={() => openDashboardTarget("completed")}
+                  className="bg-gradient-to-br from-purple-900/30 to-purple-900/10 border border-purple-600/30 p-6 rounded-xl text-left hover:shadow-lg hover:border-purple-400 transition active:scale-95"
+                >
                   <div className="flex items-end justify-between mb-2">
                     <div>
                       <h3 className="text-gray-400 text-xs uppercase tracking-wide mb-1">Completed</h3>
@@ -397,7 +635,7 @@ export default function AdminDashboard() {
                       style={{ width: `${Math.min((stats.completedRecordings || 0) * 10, 100)}%` }}
                     ></div>
                   </div>
-                </div>
+                </button>
               </div>
 
               {/* CHARTS SECTION */}
@@ -524,8 +762,20 @@ export default function AdminDashboard() {
 
           {isAdminMode && page === "addScript" && <AddScript />}
           {isAdminMode && page === "vendors" && <AddVendor />}
-          {page === "addUser" && <AddUser accessRole={isVendorMode ? "vendor" : "admin"} />}
-          {isAdminMode && page === "all" && <AllScripts />}
+          {page === "addUser" && (
+            <AddUser
+              accessRole={isVendorMode ? "vendor" : "admin"}
+              initialAddMode={userManagementMode}
+            />
+          )}
+          {isAdminMode && page === "all" && (
+            <AllScripts
+              viewMode={scriptManagementMode}
+              statusFilter={scriptStatusFilter}
+              audioOnly={scriptAudioOnly}
+            />
+          )}
+          {isAdminMode && page === "settings" && <Settings />}
 
         </div>
       </div>

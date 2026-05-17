@@ -13,10 +13,12 @@ import {
   getAllScripts,
   getAllUsers,
   getAllVendors,
+  getAdminSettings,
   getStats,
   getUserDetails,
   downloadAllUserRecordings,
   updateUserStatus,
+  updateAdminSettings,
   updateVendor,
   updateUserVendor,
 } from "../controllers/adminController.js";
@@ -72,6 +74,8 @@ router.post("/bulk-vendors", handleSpreadsheetUpload, bulkAddVendors);
 router.post("/add-user", addUser);
 router.post("/bulk-users", handleSpreadsheetUpload, bulkAddUsers);
 router.get("/stats", getStats);
+router.get("/settings", getAdminSettings);
+router.post("/settings", updateAdminSettings);
 router.get("/users", getAllUsers);
 router.get("/user/:id/recordings/download", downloadAllUserRecordings);
 router.get("/user/:id", getUserDetails);

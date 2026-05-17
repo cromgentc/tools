@@ -1,5 +1,5 @@
 export const API_URLS = {
-  LOCAL: "http://localhost:5000",
+  LOCAL: "http://127.0.0.1:5000",
   LIVE: "https://recording-tools.onrender.com",
 };
 
@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
   ADMIN_ADD_USER: `${API_BASE_URL}/api/admin/add-user`,
   ADMIN_BULK_ADD_USERS: `${API_BASE_URL}/api/admin/bulk-users`,
   ADMIN_STATS: `${API_BASE_URL}/api/admin/stats`,
+  ADMIN_SETTINGS: `${API_BASE_URL}/api/admin/settings`,
 
   // Auth endpoints
   AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
@@ -71,6 +72,7 @@ export const API_ENDPOINTS = {
       return trimmed
         .replace("http://localhost:5000", API_BASE_URL)
         .replace("https://localhost:5000", API_BASE_URL)
+        .replace("http://127.0.0.1:5000", API_BASE_URL)
         .replace("/raw/upload/", "/video/upload/");
     }
 

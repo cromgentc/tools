@@ -12,13 +12,13 @@ import {
   AlertCircle,
   Building2,
   FileText,
-  ChevronDown,
   Trash2,
   Radio,
   Clock3,
   Download,
   Activity,
   Loader,
+  RefreshCw,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -510,7 +510,7 @@ function AudioDuration({ audioUrl }) {
   );
 }
 
-export default function AddUser({ accessRole = "admin" }) {
+export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
   const currentUser = (() => {
     try {
       return JSON.parse(localStorage.getItem("userInfo"));
@@ -535,7 +535,8 @@ export default function AddUser({ accessRole = "admin" }) {
   const [vendors, setVendors] = useState([]);
   const [vendorsLoading, setVendorsLoading] = useState(false);
 
-  const [showUsersTable, setShowUsersTable] = useState(false);
+  const [addUserPanelMode, setAddUserPanelMode] = useState(initialAddMode);
+  const [showUsersTable, setShowUsersTable] = useState(true);
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
@@ -601,6 +602,10 @@ export default function AddUser({ accessRole = "admin" }) {
     fetchVendors();
   }, []);
 
+  useEffect(() => {
+    setAddUserPanelMode(initialAddMode);
+  }, [initialAddMode]);
+
   const fetchUsers = async () => {
     try {
       setUsersLoading(true);
@@ -647,6 +652,12 @@ export default function AddUser({ accessRole = "admin" }) {
       setUsersLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (showUsersTable) {
+      fetchUsers();
+    }
+  }, [showUsersTable, isVendorMode, currentVendorId]);
 
   const fetchUserDetails = async (userId) => {
     try {
@@ -793,17 +804,8 @@ export default function AddUser({ accessRole = "admin" }) {
     );
   };
 
-  const toggleUsersTable = async () => {
-    if (!showUsersTable) {
-      if (users.length === 0) {
-        await fetchUsers();
-      }
-
-      setShowUsersTable(true);
-      return;
-    }
-
-    setShowUsersTable(false);
+  const refreshUsersTable = async () => {
+    await fetchUsers();
   };
 
   const addUser = async (e) => {
@@ -1214,7 +1216,7 @@ export default function AddUser({ accessRole = "admin" }) {
     }
   };
 
-  const tableButtonLabel = showUsersTable ? "Hide Registered Users" : "Show Registered Users";
+  const showAddUserPanel = addUserPanelMode !== "";
   const hasAnyRecordings = (selectedUser?.recordings?.length || 0) > 0;
   const hasDownloadableRecordings = selectedUser?.recordings?.some((recording) => recording.audioLink) || false;
   const allVisibleUsersSelected = users.length > 0 && selectedUserIds.length === users.length;
@@ -1250,23 +1252,25 @@ export default function AddUser({ accessRole = "admin" }) {
                 : "Create a single user or vendor, perform bulk import, and view the complete admin panel of registered users below.."}
             </p>
           </div>
-          <div className="rounded-lg border border-blue-600/30 bg-blue-900/10 px-4 py-3 text-sm text-blue-200">
-            Bulk file columns:{" "}
-            <code className="rounded bg-black/30 px-1.5 py-0.5">name</code>,{" "}
-            <code className="rounded bg-black/30 px-1.5 py-0.5">email</code>,{" "}
-            <code className="rounded bg-black/30 px-1.5 py-0.5">mobile</code>,{" "}
-            <code className="rounded bg-black/30 px-1.5 py-0.5">password</code>
-            {!isVendorMode && (
-              <>
-                , <code className="rounded bg-black/30 px-1.5 py-0.5">role</code>,{" "}
-                <code className="rounded bg-black/30 px-1.5 py-0.5">vendorName</code>
-              </>
-            )}
-          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      {showAddUserPanel && (
+      <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-6 shadow-xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-2xl font-bold">
+              <UserPlus className="h-6 w-6 text-blue-400" />
+              Add User
+            </h3>
+            <p className="mt-1 text-sm text-gray-400">
+              Add one user manually or upload many users from Excel/CSV.
+            </p>
+          </div>
+        </div>
+
+          <div className="mt-6 space-y-6">
+        {addUserPanelMode === "single" && (
         <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-8 shadow-xl">
           <div className="mb-6 flex items-center gap-2">
             <div className="rounded-full bg-blue-600 p-2">
@@ -1445,7 +1449,9 @@ export default function AddUser({ accessRole = "admin" }) {
             </button>
           </form>
         </div>
+        )}
 
+        {addUserPanelMode === "bulk" && (
         <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-8 shadow-xl">
           <div className="mb-6 flex items-center gap-2">
             <div className="rounded-full bg-green-600 p-2">
@@ -1530,9 +1536,12 @@ export default function AddUser({ accessRole = "admin" }) {
             </button>
           </div>
         </div>
+        )}
+          </div>
       </div>
+      )}
 
-      {(bulkResult.inserted.length > 0 || bulkResult.errors.length > 0) && (
+      {showAddUserPanel && addUserPanelMode === "bulk" && (bulkResult.inserted.length > 0 || bulkResult.errors.length > 0) && (
         <div className="rounded-lg border border-gray-600 bg-gradient-to-br from-gray-700 to-gray-800 p-6">
           <div className="mb-4 flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-400" />
@@ -1589,6 +1598,7 @@ export default function AddUser({ accessRole = "admin" }) {
         </div>
       )}
 
+      {!showAddUserPanel && (
       <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 p-6 shadow-xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1599,7 +1609,7 @@ export default function AddUser({ accessRole = "admin" }) {
             <p className="mt-1 text-sm text-gray-400">
               {isVendorMode
                 ? "Only users under your vendor will be displayed here, with limited table columns."
-                : "Click the button to open the users table. Clicking on a row will display the full user details below."}
+                : "Users table is shown here. Click a row to display full user details below."}
             </p>
           </div>
 
@@ -1620,7 +1630,7 @@ export default function AddUser({ accessRole = "admin" }) {
 
             <button
               type="button"
-              onClick={toggleUsersTable}
+              onClick={refreshUsersTable}
               disabled={usersLoading}
               className={`flex items-center justify-center gap-2 rounded-lg px-5 py-3 font-semibold transition-all ${
                 usersLoading
@@ -1635,8 +1645,8 @@ export default function AddUser({ accessRole = "admin" }) {
                 </>
               ) : (
                 <>
-                  <ChevronDown className={`h-5 w-5 transition-transform ${showUsersTable ? "rotate-180" : ""}`} />
-                  {tableButtonLabel}
+                  <RefreshCw className="h-5 w-5" />
+                  Refresh
                   {users.length > 0 ? `(${users.length})` : ""}
                 </>
               )}
@@ -2179,6 +2189,7 @@ export default function AddUser({ accessRole = "admin" }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

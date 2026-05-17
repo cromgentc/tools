@@ -1,7 +1,7 @@
 import Recording from "../models/Recording.js";
 import Script from "../models/Script.js";
 import User from "../models/User.js";
-import cloudinary from "../config/cloudinary.js";
+import cloudinary, { configureCloudinary } from "../config/cloudinary.js";
 import fs from "fs";
 import xlsx from "xlsx";
 
@@ -79,6 +79,12 @@ export const uploadAllRecordings = async (req, res) => {
     let public_id;
     
     try {
+      const cloudinarySettings = configureCloudinary();
+
+      if (!cloudinarySettings.cloudName || !cloudinarySettings.apiKey || !cloudinarySettings.apiSecret) {
+        throw new Error("Cloudinary settings are missing");
+      }
+
       // Audio files are best delivered from Cloudinary via the video resource type.
       const result = await cloudinary.uploader.upload(req.file.path, {
         resource_type: "video",
@@ -225,6 +231,10 @@ export const getAllScriptsWithAudio = async (req, res) => {
         userId: script.userId,
         mobile: script.mobile,
         email: script.email,
+        userName: script.userId?.name || "",
+        vendorId: script.userId?.vendorId || null,
+        vendorName: script.userId?.vendorName || "Unassigned Vendor",
+        vendorCode: script.userId?.vendorCode || "N/A",
         content: script.content,
         status: script.status,
 
@@ -254,7 +264,7 @@ export const getAllScriptsWithAudio = async (req, res) => {
 export const downloadScriptsExcel = async (req, res) => {
   try {
     const scripts = await Script.find()
-      .populate("userId", "name mobile email")
+      .populate("userId", "name mobile email vendorId vendorName vendorCode")
       .sort({ createdAt: -1 })
       .lean();
 

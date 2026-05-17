@@ -25,6 +25,7 @@ import {
   normalizeVendorName,
   resolveVendorAssignment,
 } from "../utils/vendor.js";
+import { readAdminSettings, saveAdminSettings } from "../utils/adminSettings.js";
 
 const USER_ACCOUNT_STATUSES = new Set(["active", "inactive", "suspended"]);
 const USER_RECORDING_DOWNLOAD_CONCURRENCY = Number(
@@ -1518,6 +1519,41 @@ export const getStats = async (req, res) => {
       success: false,
       message: err.message || "Failed to fetch stats",
       data: null
+    });
+  }
+};
+
+export const getAdminSettings = async (req, res) => {
+  try {
+    const settings = readAdminSettings();
+
+    res.json({
+      success: true,
+      settings,
+    });
+  } catch (err) {
+    console.error("GET ADMIN SETTINGS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to fetch settings",
+    });
+  }
+};
+
+export const updateAdminSettings = async (req, res) => {
+  try {
+    const settings = saveAdminSettings(req.body || {});
+
+    res.json({
+      success: true,
+      message: "Settings saved successfully",
+      settings,
+    });
+  } catch (err) {
+    console.error("UPDATE ADMIN SETTINGS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Failed to save settings",
     });
   }
 };
