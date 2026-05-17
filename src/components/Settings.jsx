@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { ChevronDown, Cloud, Image, Save, Search, Star } from "lucide-react";
+import { ChevronDown, Cloud, Eye, EyeOff, Image, Save, Search, Star } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
 const SETTINGS_KEY = "adminSettings";
@@ -91,7 +91,8 @@ export const applyAdminSettings = (nextSettings = readSettings()) => {
 
 export default function Settings() {
   const [settings, setSettings] = useState(defaultSettings);
-  const [openSection, setOpenSection] = useState("branding");
+  const [openSection, setOpenSection] = useState("");
+  const [showApiSecret, setShowApiSecret] = useState(false);
 
   useEffect(() => {
     setSettings(readSettings());
@@ -341,13 +342,23 @@ export default function Settings() {
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                 API_SECRET
               </label>
-              <input
-                type="password"
-                value={settings.apiSecret}
-                onChange={(e) => updateField("apiSecret", e.target.value)}
-                placeholder="API_SECRET"
-                className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-              />
+              <div className="relative">
+                <input
+                  type={showApiSecret ? "text" : "password"}
+                  value={settings.apiSecret}
+                  onChange={(e) => updateField("apiSecret", e.target.value)}
+                  placeholder="API_SECRET"
+                  className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 pr-12 outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiSecret((prev) => !prev)}
+                  className="absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-700 hover:text-white"
+                  aria-label={showApiSecret ? "Hide API secret" : "Show API secret"}
+                >
+                  {showApiSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </div>
         </Section>
