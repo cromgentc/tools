@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   AlertCircle,
+  Clock3,
   RefreshCw,
   Building2,
   Download,
@@ -67,6 +68,13 @@ export default function AdminDashboard() {
     completedRecordings: 0,
     pendingScripts: 0,
   });
+  const [vendorStats, setVendorStats] = useState({
+    totalUsers: 0,
+    totalScripts: 0,
+    completedScripts: 0,
+    pendingScripts: 0,
+    totalRecordings: 0,
+  });
 
   const navigate = useNavigate();
 
@@ -96,8 +104,7 @@ export default function AdminDashboard() {
     }
 
     if (user.role === "vendor") {
-      setPage("addUser");
-      setUserMenuOpen(true);
+      setPage("dashboard");
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -168,14 +175,49 @@ export default function AdminDashboard() {
     }
   };
 
+  const getCurrentVendorId = () => String(currentUser?.vendorId || currentUser?._id || "").trim();
+
+  const fetchVendorStats = async () => {
+    const vendorId = getCurrentVendorId();
+
+    if (!vendorId) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_ENDPOINTS.ADMIN_USERS}?vendorId=${encodeURIComponent(vendorId)}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to fetch vendor dashboard");
+      }
+
+      const vendorUsers = Array.isArray(data.users) ? data.users : [];
+      setVendorStats({
+        totalUsers: vendorUsers.length,
+        totalScripts: vendorUsers.reduce((sum, user) => sum + Number(user.totalScripts || 0), 0),
+        completedScripts: vendorUsers.reduce((sum, user) => sum + Number(user.completedScripts || 0), 0),
+        pendingScripts: vendorUsers.reduce((sum, user) => sum + Number(user.pendingScripts || 0), 0),
+        totalRecordings: vendorUsers.reduce((sum, user) => sum + Number(user.totalRecordings || 0), 0),
+      });
+    } catch (err) {
+      console.error("Vendor stats error:", err);
+      toast.error(err.message || "Failed to load vendor dashboard");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isAdminMode) {
       fetchStats();
     }
+    if (isVendorMode) {
+      fetchVendorStats();
+    }
     checkBackend();
     const interval = setInterval(checkBackend, 5000); // Check every 5 seconds
     return () => clearInterval(interval);
-  }, [isAdminMode]);
+  }, [isAdminMode, isVendorMode, currentUser?.vendorId, currentUser?._id]);
 
   // ================= LOGOUT =================
   const logout = () => {
@@ -520,6 +562,47 @@ export default function AdminDashboard() {
     </div>
   );
 
+  const StatGraph = ({ title, icon, data, accent = "blue" }) => {
+    const maxValue = Math.max(...data.map((item) => Number(item.value) || 0), 1);
+    const accentClasses = {
+      blue: "from-blue-500 to-cyan-400",
+      green: "from-green-500 to-emerald-400",
+      purple: "from-purple-500 to-fuchsia-400",
+      orange: "from-orange-500 to-amber-400",
+    };
+
+    return (
+      <div className="rounded-xl border border-gray-700 bg-gray-800 p-4 md:p-6">
+        <h4 className="mb-5 flex items-center gap-2 text-base font-bold text-white md:text-lg">
+          {icon}
+          {title}
+        </h4>
+
+        <div className="flex h-64 items-end gap-3 overflow-x-auto pb-2 sm:gap-4">
+          {data.map((item) => {
+            const value = Number(item.value) || 0;
+            const height = Math.max((value / maxValue) * 100, value > 0 ? 8 : 2);
+
+            return (
+              <div key={item.label} className="flex min-w-[76px] flex-1 flex-col items-center justify-end gap-2">
+                <div className="text-xs font-semibold text-gray-200">{value}</div>
+                <div className="flex h-44 w-full items-end rounded-lg bg-gray-900/70 p-1">
+                  <div
+                    className={`w-full rounded-md bg-gradient-to-t ${accentClasses[accent] || accentClasses.blue} transition-all duration-500`}
+                    style={{ height: `${height}%` }}
+                  />
+                </div>
+                <div className="min-h-[32px] text-center text-[11px] font-medium leading-tight text-gray-400">
+                  {item.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
       {sidebarOpen && (
@@ -568,11 +651,12 @@ export default function AdminDashboard() {
 
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {isAdminMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
+          {isVendorMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
           {isAdminMode && scriptAssignMenu()}
           {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
           {userManagementMenu()}
           {isAdminMode && scriptManagementMenu()}
-          {accountManagementMenu()}
+          {isAdminMode && accountManagementMenu()}
           {isAdminMode && menuItem("settings", "Settings", <SettingsIcon className="w-5 h-5" />)}
           {isAdminMode && (
             <button
@@ -706,6 +790,118 @@ export default function AdminDashboard() {
 
         {/* CONTENT */}
         <div className="flex-1 overflow-auto p-3 md:p-6">
+
+          {isVendorMode && page === "dashboard" && (
+            <div className="space-y-6">
+              {backendStatus === "error" && (
+                <div className="flex items-center gap-3 rounded-lg border border-red-600/50 bg-red-900/20 p-4">
+                  <AlertCircle className="h-6 w-6 shrink-0 text-red-400" />
+                  <div>
+                    <p className="font-semibold text-red-400">Backend Connection Error</p>
+                    <p className="text-sm text-red-300">Vendor dashboard may not update.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white md:text-2xl">
+                    {currentUser?.vendorName || currentUser?.name || "Vendor"} Dashboard
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Only your assigned users and their scripts are shown here.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchVendorStats}
+                  disabled={loading}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition-all ${
+                    loading ? "cursor-not-allowed bg-gray-600" : "bg-blue-600 hover:bg-blue-700 active:scale-95"
+                  }`}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  {loading ? "Loading..." : "Refresh"}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                {[
+                  ["Total Users", vendorStats.totalUsers, <Users className="h-8 w-8 text-green-400 opacity-60" />, "text-green-400", "border-green-600/30 bg-green-900/10"],
+                  ["Total Scripts", vendorStats.totalScripts, <FileText className="h-8 w-8 text-blue-400 opacity-60" />, "text-blue-400", "border-blue-600/30 bg-blue-900/10"],
+                  ["Completed Scripts", vendorStats.completedScripts, <Radio className="h-8 w-8 text-purple-400 opacity-60" />, "text-purple-400", "border-purple-600/30 bg-purple-900/10"],
+                  ["Pending Scripts", vendorStats.pendingScripts, <Clock3 className="h-8 w-8 text-yellow-400 opacity-60" />, "text-yellow-400", "border-yellow-600/30 bg-yellow-900/10"],
+                  ["Total Recordings", vendorStats.totalRecordings, <Download className="h-8 w-8 text-orange-400 opacity-60" />, "text-orange-400", "border-orange-600/30 bg-orange-900/10"],
+                ].map(([label, value, icon, textClass, cardClass]) => (
+                  <div key={label} className={`rounded-xl border p-5 ${cardClass}`}>
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="mb-1 text-xs uppercase tracking-wide text-gray-400">{label}</p>
+                        <p className={`text-3xl font-bold ${textClass}`}>{value || 0}</p>
+                      </div>
+                      {icon}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <StatGraph
+                  title="Vendor Dashboard Graph"
+                  icon={<LayoutDashboard className="h-5 w-5 text-blue-400" />}
+                  accent="blue"
+                  data={[
+                    { label: "Users", value: vendorStats.totalUsers },
+                    { label: "Scripts", value: vendorStats.totalScripts },
+                    { label: "Completed", value: vendorStats.completedScripts },
+                    { label: "Pending", value: vendorStats.pendingScripts },
+                    { label: "Recordings", value: vendorStats.totalRecordings },
+                  ]}
+                />
+
+                <div className="rounded-xl border border-gray-700 bg-gray-800 p-4 md:p-6">
+                  <h4 className="mb-5 flex items-center gap-2 text-base font-bold text-white md:text-lg">
+                    <Radio className="h-5 w-5 text-green-400" />
+                    Script Completion
+                  </h4>
+                  <div className="space-y-5">
+                    {[
+                      ["Completed Scripts", vendorStats.completedScripts, "from-green-500 to-emerald-400", "text-green-400"],
+                      ["Pending Scripts", vendorStats.pendingScripts, "from-yellow-500 to-amber-400", "text-yellow-400"],
+                    ].map(([label, value, barClass, textClass]) => {
+                      const total = Math.max(vendorStats.totalScripts || 0, 1);
+                      const percent = Math.min((Number(value || 0) / total) * 100, 100);
+
+                      return (
+                        <div key={label}>
+                          <div className="mb-2 flex justify-between text-sm">
+                            <span className="text-gray-300">{label}</span>
+                            <span className={`font-semibold ${textClass}`}>{value || 0}</span>
+                          </div>
+                          <div className="h-4 overflow-hidden rounded-full bg-gray-900">
+                            <div
+                              className={`h-full rounded-full bg-gradient-to-r ${barClass} transition-all duration-500`}
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-6 border-t border-gray-700 pt-4 text-center">
+                    <p className="text-sm text-gray-300">
+                      <span className="text-lg font-bold text-green-400">
+                        {vendorStats.totalScripts > 0
+                          ? Math.round((vendorStats.completedScripts / vendorStats.totalScripts) * 100)
+                          : 0}%
+                      </span>{" "}
+                      Completion Rate
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* DASHBOARD */}
           {isAdminMode && page === "dashboard" && (
@@ -848,6 +1044,18 @@ export default function AdminDashboard() {
 
               {/* CHARTS SECTION */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                <StatGraph
+                  title="Dashboard Graph"
+                  icon={<LayoutDashboard className="h-5 w-5 text-blue-400" />}
+                  accent="blue"
+                  data={[
+                    { label: "Scripts", value: stats.totalScripts },
+                    { label: "Users", value: stats.totalUsers },
+                    { label: "Vendors", value: stats.totalVendors },
+                    { label: "Recordings", value: stats.totalRecordings },
+                    { label: "Completed", value: stats.completedRecordings },
+                  ]}
+                />
                 
                 {/* DISTRIBUTION CHART */}
                 <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
@@ -907,7 +1115,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* SUMMARY STATS */}
-                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:col-span-2">
                   <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <LayoutDashboard className="w-5 h-5 text-green-400" />
                     Quick Summary
@@ -984,7 +1192,7 @@ export default function AdminDashboard() {
             />
           )}
           {isAdminMode && page === "settings" && <Settings />}
-          {page === "accountManagement" && <AccountManagement />}
+          {isAdminMode && page === "accountManagement" && <AccountManagement />}
           {page === "profile" && <Profile />}
 
         </div>

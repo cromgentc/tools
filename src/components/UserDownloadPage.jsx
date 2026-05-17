@@ -607,53 +607,53 @@ export default function UserDownloadPage() {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:max-w-2xl lg:justify-end">
-                  <button
-                    type="button"
-                    onClick={downloadUserExcel}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold transition hover:bg-emerald-700"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download User Excel
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={downloadAllZip}
-                    disabled={downloadingAll || downloadableRecordings.length === 0}
-                    className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold transition ${
-                      downloadingAll || downloadableRecordings.length === 0
-                        ? "cursor-not-allowed bg-gray-700 text-gray-400"
-                        : "bg-green-600 text-white hover:bg-green-700"
-                    }`}
-                  >
-                    {downloadingAll ? (
-                      <Loader className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                    {downloadingAll ? "Downloading..." : "Download All ZIP"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={downloadAllOneByOne}
-                    disabled={downloadingOneByOne || downloadableRecordings.length === 0}
-                    className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold transition ${
-                      downloadingOneByOne || downloadableRecordings.length === 0
-                        ? "cursor-not-allowed bg-gray-700 text-gray-400"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                  >
-                    {downloadingOneByOne ? (
-                      <Loader className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                    {downloadingOneByOne ? "Starting..." : "Download All One by One"}
-                  </button>
-
                   {isAdminMode && (
                     <>
+                      <button
+                        type="button"
+                        onClick={downloadUserExcel}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold transition hover:bg-emerald-700"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download User Excel
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={downloadAllZip}
+                        disabled={downloadingAll || downloadableRecordings.length === 0}
+                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold transition ${
+                          downloadingAll || downloadableRecordings.length === 0
+                            ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                            : "bg-green-600 text-white hover:bg-green-700"
+                        }`}
+                      >
+                        {downloadingAll ? (
+                          <Loader className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                        {downloadingAll ? "Downloading..." : "Download All ZIP"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={downloadAllOneByOne}
+                        disabled={downloadingOneByOne || downloadableRecordings.length === 0}
+                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold transition ${
+                          downloadingOneByOne || downloadableRecordings.length === 0
+                            ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                            : "bg-blue-600 text-white hover:bg-blue-700"
+                        }`}
+                      >
+                        {downloadingOneByOne ? (
+                          <Loader className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                        {downloadingOneByOne ? "Starting..." : "Download All One by One"}
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleDeleteAllRecordings}
@@ -808,19 +808,21 @@ export default function UserDownloadPage() {
                           <source src={recording.audioLink} />
                         </audio>
 
-                        <button
-                          type="button"
-                          onClick={() => downloadOne(recording, index)}
-                          disabled={downloadingId === recording._id}
-                          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-                        >
-                          {downloadingId === recording._id ? (
-                            <Loader className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Download className="h-4 w-4" />
-                          )}
-                          Download WAV
-                        </button>
+                        {isAdminMode && (
+                          <button
+                            type="button"
+                            onClick={() => downloadOne(recording, index)}
+                            disabled={downloadingId === recording._id}
+                            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                          >
+                            {downloadingId === recording._id ? (
+                              <Loader className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                            Download WAV
+                          </button>
+                        )}
                       </>
                     ) : (
                       <p className="mt-3 text-sm text-gray-500">Audio link not available</p>

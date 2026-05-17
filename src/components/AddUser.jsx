@@ -2070,14 +2070,16 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <button
-                      type="button"
-                      onClick={downloadSelectedUserExcel}
-                      className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 font-semibold transition-all hover:bg-emerald-700 active:scale-95"
-                    >
-                      <Download className="h-5 w-5" />
-                      Download User Excel
-                    </button>
+                    {!isVendorMode && (
+                      <button
+                        type="button"
+                        onClick={downloadSelectedUserExcel}
+                        className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 font-semibold transition-all hover:bg-emerald-700 active:scale-95"
+                      >
+                        <Download className="h-5 w-5" />
+                        Download User Excel
+                      </button>
+                    )}
 
                   {!isVendorMode && (
                     <>
@@ -2304,25 +2306,27 @@ export default function AddUser({ accessRole = "admin", initialAddMode = "" }) {
                                 <source src={recording.audioLink} />
                               </audio>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  convertAndDownload({
-                                    audioUrl: recording.audioLink,
-                                    format: "wav",
-                                    fileName: getRecordingDownloadName(
-                                      recording,
-                                      selectedUser.mobile,
-                                      index,
-                                      "wav"
-                                    ),
-                                  })
-                                }
-                                className="mt-3 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-700"
-                              >
-                                <Download className="h-4 w-4" />
-                                Download WAV
-                              </button>
+                              {!isVendorMode && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    convertAndDownload({
+                                      audioUrl: recording.audioLink,
+                                      format: "wav",
+                                      fileName: getRecordingDownloadName(
+                                        recording,
+                                        selectedUser.mobile,
+                                        index,
+                                        "wav"
+                                      ),
+                                    })
+                                  }
+                                  className="mt-3 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-700"
+                                >
+                                  <Download className="h-4 w-4" />
+                                  Download WAV
+                                </button>
+                              )}
                             </>
                           ) : (
                             <p className="mt-3 text-sm text-gray-500">Audio link not available</p>
