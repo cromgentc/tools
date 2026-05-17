@@ -27,18 +27,38 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   "http://localhost:5173", // Vite
   "http://localhost:3000",
+  "https://tools-recording.vercel.app",
   "https://recording-tools.onrender.com",
-];
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+].filter(Boolean);
+
+const isAllowedOrigin = (origin = "") =>
+  allowedOrigins.includes(origin) ||
+  /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    console.log("BLOCKED CORS:", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Disposition", "X-Downloaded-Recordings", "X-Failed-Recordings"],
+  optionsSuccessStatus: 204,
+};
 
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
-      if (
-        allowedOrigins.includes(origin) ||
-        origin.includes("vercel.app")
-      ) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
 
@@ -46,9 +66,14 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: corsOptions.methods,
+    allowedHeaders: corsOptions.allowedHeaders,
     exposedHeaders: ["Content-Disposition", "X-Downloaded-Recordings", "X-Failed-Recordings"],
+    optionsSuccessStatus: 204,
   })
 );
+
+app.options(/.*/, cors(corsOptions));
 
 /* =========================
    BODY LIMIT

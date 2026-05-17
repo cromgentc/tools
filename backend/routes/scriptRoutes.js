@@ -32,10 +32,30 @@ const upload = multer({
   },
 });
 
+const handleSpreadsheetUpload = (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+
+    next();
+  });
+};
+
 // ===== ROUTES =====
 router.post("/assign", assignScript);
 router.get("/:userId", getUserScript);
 router.post("/complete", completeScript);
-router.post("/bulk-upload", upload.single("file"), bulkUploadScripts);
+router.post("/bulk-upload", handleSpreadsheetUpload, bulkUploadScripts);
 
 export default router;
