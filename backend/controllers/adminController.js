@@ -3,6 +3,7 @@ import Script from "../models/Script.js";
 import Recording from "../models/Recording.js";
 import Record from "../models/Record.js";
 import Metadata from "../models/Metadata.js";
+import VendorReport from "../models/VendorReport.js";
 import { removeRecordingAssets } from "../utils/recordingCleanup.js";
 import archiver from "archiver";
 import axios from "axios";
@@ -10,6 +11,7 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import xlsx from "xlsx";
+import { google } from "googleapis";
 import { serializeUserActivity } from "../utils/userActivity.js";
 import {
   resolveUserRole,
@@ -1628,6 +1630,326 @@ export const getStats = async (req, res) => {
       success: false,
       message: err.message || "Failed to fetch stats",
       data: null
+    });
+  }
+};
+
+const getReportData = async (mode = "vendor") => {
+  const [
+    totalUsers,
+    totalVendors,
+    totalScripts,
+    totalRecordings,
+    completedRecordings,
+    pendingScripts,
+  ] = await Promise.all([
+    User.countDocuments({ role: { $nin: ["admin", "vendor"] } }),
+    User.countDocuments({ role: "vendor" }),
+    Script.countDocuments(),
+    Recording.countDocuments(),
+    Recording.countDocuments({ status: "completed" }),
+    Script.countDocuments({ status: "pending" }),
+  ]);
+
+  const rows =
+    mode === "user"
+      ? [
+          { Metric: "Total Users", Value: totalUsers },
+          { Metric: "Total Scripts", Value: totalScripts },
+          { Metric: "Total Recordings", Value: totalRecordings },
+          { Metric: "Completed Recordings", Value: completedRecordings },
+          { Metric: "Pending Scripts", Value: pendingScripts },
+        ]
+      : [
+          { Metric: "Total Vendors", Value: totalVendors },
+          { Metric: "Total Users", Value: totalUsers },
+          { Metric: "Total Scripts", Value: totalScripts },
+          { Metric: "Total Recordings", Value: totalRecordings },
+          { Metric: "Completed Recordings", Value: completedRecordings },
+        ];
+
+  return {
+    mode,
+    title: mode === "user" ? "User Wise Report" : "Vendor Wise Report",
+    generatedAt: new Date(),
+    rows,
+  };
+};
+
+export const downloadReportExcel = async (req, res) => {
+  try {
+    const mode = String(req.query.mode || "vendor").toLowerCase() === "user" ? "user" : "vendor";
+    const report = await getReportData(mode);
+    const rows = report.rows.map((row, index) => ({
+      "S.No": index + 1,
+      Report: report.title,
+      Metric: row.Metric,
+      Value: row.Value,
+      "Generated At": report.generatedAt.toLocaleString("en-IN"),
+    }));
+
+    const worksheet = xlsx.utils.json_to_sheet(rows, {
+      header: ["S.No", "Report", "Metric", "Value", "Generated At"],
+    });
+    worksheet["!cols"] = [
+      { wch: 8 },
+      { wch: 24 },
+      { wch: 28 },
+      { wch: 14 },
+      { wch: 24 },
+    ];
+
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, report.title.slice(0, 31));
+    const buffer = xlsx.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const fileName = `${mode}-wise-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error("DOWNLOAD REPORT EXCEL ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to download report Excel",
+    });
+  }
+};
+
+const getGoogleSheetsClient = async () => {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  if (!process.env.GOOGLE_SHEET_ID || !clientEmail || !privateKey) {
+    throw new Error(
+      "Google Sheet setup missing. Add GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY in backend environment."
+    );
+  }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  await auth.authorize();
+  return google.sheets({ version: "v4", auth });
+};
+
+export const uploadReportToGoogleSheet = async (req, res) => {
+  try {
+    const mode = String(req.body?.mode || req.query.mode || "vendor").toLowerCase() === "user" ? "user" : "vendor";
+    const report = await getReportData(mode);
+    const sheets = await getGoogleSheetsClient();
+    const sheetName = mode === "user" ? "User Wise Report" : "Vendor Wise Report";
+    const values = [
+      ["Report", report.title],
+      ["Generated At", report.generatedAt.toLocaleString("en-IN")],
+      [],
+      ["S.No", "Metric", "Value"],
+      ...report.rows.map((row, index) => [index + 1, row.Metric, row.Value]),
+      [],
+    ];
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${sheetName}!A1`,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values },
+    });
+
+    return res.json({
+      success: true,
+      message: `${report.title} uploaded to Google Sheet`,
+      sheetId: process.env.GOOGLE_SHEET_ID,
+    });
+  } catch (err) {
+    console.error("UPLOAD REPORT GOOGLE SHEET ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to upload report to Google Sheet",
+    });
+  }
+};
+
+export const shareVendorReport = async (req, res) => {
+  try {
+    const vendorId = String(req.body?.vendorId || "").trim();
+    const reportUrl = String(req.body?.reportUrl || "").trim();
+    const projectName = String(req.body?.projectName || "").trim();
+    const batch = String(req.body?.batch || "").trim();
+
+    if (!vendorId) {
+      safeDeleteFile(req.file?.path);
+      return res.status(400).json({
+        success: false,
+        message: "Please select a vendor",
+      });
+    }
+
+    if (!req.file && !reportUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "Please choose a report file or paste report URL",
+      });
+    }
+
+    const vendor = await User.findOne({ _id: vendorId, role: "vendor" }).select(
+      "name vendorName vendorCode"
+    );
+
+    if (!vendor) {
+      safeDeleteFile(req.file?.path);
+      return res.status(404).json({
+        success: false,
+        message: "Selected vendor not found",
+      });
+    }
+
+    const backendBaseUrl = (process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    const fileName = req.file?.filename || "";
+    const fileUrl = fileName ? `${backendBaseUrl}/uploads/vendor-reports/${fileName}` : "";
+
+    const report = await VendorReport.create({
+      vendorId: vendor._id,
+      vendorName: vendor.vendorName || vendor.name,
+      vendorCode: vendor.vendorCode || "N/A",
+      projectName,
+      batch,
+      reportUrl,
+      fileName,
+      fileUrl,
+      sharedBy: "admin",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Report shared with selected vendor",
+      report,
+    });
+  } catch (err) {
+    safeDeleteFile(req.file?.path);
+    console.error("SHARE VENDOR REPORT ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to share vendor report",
+    });
+  }
+};
+
+export const getVendorReports = async (req, res) => {
+  try {
+    const vendorId = String(req.query.vendorId || "").trim();
+    const query = vendorId ? { vendorId } : {};
+    const reports = await VendorReport.find(query).sort({ createdAt: -1 }).lean();
+
+    return res.json({
+      success: true,
+      reports,
+    });
+  } catch (err) {
+    console.error("GET VENDOR REPORTS ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to fetch vendor reports",
+    });
+  }
+};
+
+export const updateVendorReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vendorId = String(req.body?.vendorId || "").trim();
+    const reportUrl = String(req.body?.reportUrl || "").trim();
+    const projectName = String(req.body?.projectName || "").trim();
+    const batch = String(req.body?.batch || "").trim();
+
+    const report = await VendorReport.findById(id);
+
+    if (!report) {
+      safeDeleteFile(req.file?.path);
+      return res.status(404).json({
+        success: false,
+        message: "Vendor report not found",
+      });
+    }
+
+    if (vendorId) {
+      const vendor = await User.findOne({ _id: vendorId, role: "vendor" }).select(
+        "name vendorName vendorCode"
+      );
+
+      if (!vendor) {
+        safeDeleteFile(req.file?.path);
+        return res.status(404).json({
+          success: false,
+          message: "Selected vendor not found",
+        });
+      }
+
+      report.vendorId = vendor._id;
+      report.vendorName = vendor.vendorName || vendor.name;
+      report.vendorCode = vendor.vendorCode || "N/A";
+    }
+
+    report.reportUrl = reportUrl;
+    report.projectName = projectName;
+    report.batch = batch;
+
+    if (req.file) {
+      const backendBaseUrl = (process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+      report.fileName = req.file.filename;
+      report.fileUrl = `${backendBaseUrl}/uploads/vendor-reports/${req.file.filename}`;
+    }
+
+    await report.save();
+
+    return res.json({
+      success: true,
+      message: "Vendor report updated successfully",
+      report,
+    });
+  } catch (err) {
+    safeDeleteFile(req.file?.path);
+    console.error("UPDATE VENDOR REPORT ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to update vendor report",
+    });
+  }
+};
+
+export const deleteVendorReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const report = await VendorReport.findById(id);
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor report not found",
+      });
+    }
+
+    if (report.fileName) {
+      safeDeleteFile(path.resolve("uploads", "vendor-reports", path.basename(report.fileName)));
+    }
+
+    await VendorReport.findByIdAndDelete(id);
+
+    return res.json({
+      success: true,
+      message: "Vendor report deleted successfully",
+    });
+  } catch (err) {
+    console.error("DELETE VENDOR REPORT ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to delete vendor report",
     });
   }
 };

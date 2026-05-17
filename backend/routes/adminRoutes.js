@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 
 import {
   addVendor,
@@ -10,18 +11,24 @@ import {
   deleteScript,
   deleteAllUserRecordings,
   deleteUser,
+  deleteVendorReport,
   getAllScripts,
   getAllUsers,
   getAllVendors,
   getAdminSettings,
+  getVendorReports,
   getStats,
   getUserDetails,
   downloadAllUserRecordings,
+  downloadReportExcel,
   updateUserDetails,
+  updateVendorReport,
   updateUserStatus,
   updateAdminSettings,
   updateVendor,
   updateUserVendor,
+  shareVendorReport,
+  uploadReportToGoogleSheet,
 } from "../controllers/adminController.js";
 
 const router = express.Router();
@@ -48,12 +55,54 @@ const upload = multer({
   },
 });
 
+const reportUploadDir = path.resolve("uploads", "vendor-reports");
+
+const reportStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(reportUploadDir)) {
+      fs.mkdirSync(reportUploadDir, { recursive: true });
+    }
+
+    cb(null, reportUploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const reportUpload = multer({
+  storage: reportStorage,
+  limits: {
+    fileSize: 25 * 1024 * 1024,
+  },
+});
+
 const handleSpreadsheetUpload = (req, res, next) => {
   upload.single("file")(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({
         success: false,
         message: err.message,
+      });
+    }
+
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+
+    next();
+  });
+};
+
+const handleReportUpload = (req, res, next) => {
+  reportUpload.single("file")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({
+        success: false,
+        message: err.code === "LIMIT_FILE_SIZE" ? "Report file must be 25MB or smaller" : err.message,
       });
     }
 
@@ -77,6 +126,12 @@ router.post("/bulk-users", handleSpreadsheetUpload, bulkAddUsers);
 router.get("/stats", getStats);
 router.get("/settings", getAdminSettings);
 router.post("/settings", updateAdminSettings);
+router.get("/report/download-excel", downloadReportExcel);
+router.post("/report/upload-google-sheet", uploadReportToGoogleSheet);
+router.get("/vendor-reports", getVendorReports);
+router.post("/vendor-reports", handleReportUpload, shareVendorReport);
+router.patch("/vendor-reports/:id", handleReportUpload, updateVendorReport);
+router.delete("/vendor-reports/:id", deleteVendorReport);
 router.get("/users", getAllUsers);
 router.get("/user/:id/recordings/download", downloadAllUserRecordings);
 router.get("/user/:id", getUserDetails);

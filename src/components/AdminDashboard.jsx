@@ -26,8 +26,11 @@ import {
   Send,
   UserPlus,
   Upload,
+  Pencil,
+  Trash2,
   Settings as SettingsIcon,
   UserCircle,
+  BarChart3,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -53,12 +56,26 @@ export default function AdminDashboard() {
   const [scriptMenuOpen, setScriptMenuOpen] = useState(false);
   const [scriptManagementMode, setScriptManagementMode] = useState("all");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [reportMenuOpen, setReportMenuOpen] = useState(false);
+  const [reportMode, setReportMode] = useState("vendor");
+  const [reportVendors, setReportVendors] = useState([]);
+  const [vendorReports, setVendorReports] = useState([]);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportVendorId, setReportVendorId] = useState("");
+  const [reportProjectName, setReportProjectName] = useState("");
+  const [reportBatch, setReportBatch] = useState("");
+  const [reportUrlInput, setReportUrlInput] = useState("");
+  const [reportFile, setReportFile] = useState(null);
+  const [reportSending, setReportSending] = useState(false);
+  const [reportEditingId, setReportEditingId] = useState("");
+  const [reportDeleteTarget, setReportDeleteTarget] = useState(null);
   const [scriptStatusFilter, setScriptStatusFilter] = useState("all");
   const [scriptAudioOnly, setScriptAudioOnly] = useState(false);
   const [adminSettings, setAdminSettings] = useState(getAdminSettings());
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [excelDownloading, setExcelDownloading] = useState(false);
+  const [reportExcelDownloading, setReportExcelDownloading] = useState(false);
   const [backendStatus, setBackendStatus] = useState("checking");
   const [stats, setStats] = useState({
     totalScripts: 0,
@@ -219,6 +236,19 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [isAdminMode, isVendorMode, currentUser?.vendorId, currentUser?._id]);
 
+  useEffect(() => {
+    if (page !== "report") return;
+
+    if (isAdminMode) {
+      fetchReportVendors();
+      fetchVendorReports();
+    }
+
+    if (isVendorMode) {
+      fetchVendorReports(getCurrentVendorId());
+    }
+  }, [page, reportMode, isAdminMode, isVendorMode, currentUser?.vendorId, currentUser?._id]);
+
   // ================= LOGOUT =================
   const logout = () => {
     localStorage.removeItem("userInfo");
@@ -256,6 +286,22 @@ export default function AdminDashboard() {
     window.URL.revokeObjectURL(blobUrl);
   };
 
+  const readResponseSafe = async (response) => {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    const text = await response.text();
+
+    return {
+      message: text.startsWith("<!DOCTYPE")
+        ? "Vendor reports API route not found. Please restart the backend server."
+        : text || "Unexpected server response",
+    };
+  };
+
   const downloadScriptsExcel = async () => {
     try {
       setExcelDownloading(true);
@@ -282,6 +328,207 @@ export default function AdminDashboard() {
       toast.error(err.message || "Excel download failed");
     } finally {
       setExcelDownloading(false);
+    }
+  };
+
+  const downloadReportExcel = async () => {
+    try {
+      setReportExcelDownloading(true);
+      const response = await fetch(API_ENDPOINTS.ADMIN_REPORT_EXCEL(reportMode));
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Report Excel download failed");
+      }
+
+      const blob = await response.blob();
+      triggerBrowserDownload(blob, `${reportMode}-wise-report.xlsx`);
+      toast.success("Report Excel downloaded");
+    } catch (err) {
+      console.error("REPORT EXCEL ERROR:", err);
+      toast.error(err.message || "Report Excel download failed");
+    } finally {
+      setReportExcelDownloading(false);
+    }
+  };
+
+  const fetchReportVendors = async () => {
+    if (!isAdminMode) return;
+
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN_VENDORS);
+      const data = await readResponseSafe(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch vendors");
+      }
+
+      setReportVendors(Array.isArray(data.vendors) ? data.vendors : []);
+    } catch (err) {
+      console.error("REPORT VENDORS ERROR:", err);
+      toast.error(err.message || "Failed to fetch vendors");
+    }
+  };
+
+  const fetchVendorReports = async (vendorId = "") => {
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN_VENDOR_REPORTS(vendorId));
+      const data = await readResponseSafe(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch vendor reports");
+      }
+
+      setVendorReports(Array.isArray(data.reports) ? data.reports : []);
+    } catch (err) {
+      console.error("VENDOR REPORTS ERROR:", err);
+      toast.error(err.message || "Failed to fetch vendor reports");
+    }
+  };
+
+  const openShareReportModal = () => {
+    setReportVendorId(reportVendors[0]?._id || "");
+    setReportProjectName("");
+    setReportBatch("");
+    setReportUrlInput("");
+    setReportFile(null);
+    setReportEditingId("");
+    setReportModalOpen(true);
+  };
+
+  const openEditReportModal = (report) => {
+    setReportVendorId(String(report.vendorId || ""));
+    setReportProjectName(report.projectName || "");
+    setReportBatch(report.batch || "");
+    setReportUrlInput(report.reportUrl || "");
+    setReportFile(null);
+    setReportEditingId(report._id);
+    setReportModalOpen(true);
+  };
+
+  const getDirectReportDownloadUrl = (rawUrl) => {
+    try {
+      const url = new URL(rawUrl);
+      const host = url.hostname.toLowerCase();
+
+      if (host.includes("drive.google.com")) {
+        const fileMatch = url.pathname.match(/\/file\/d\/([^/]+)/);
+        const fileId = fileMatch?.[1] || url.searchParams.get("id");
+
+        if (fileId) {
+          return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+        }
+      }
+
+      if (host.includes("docs.google.com")) {
+        const docMatch = url.pathname.match(/\/(spreadsheets|document|presentation)\/d\/([^/]+)/);
+        const docType = docMatch?.[1];
+        const docId = docMatch?.[2];
+        const exportFormats = {
+          spreadsheets: "xlsx",
+          document: "docx",
+          presentation: "pptx",
+        };
+
+        if (docType && docId) {
+          return `https://docs.google.com/${docType}/d/${docId}/export?format=${exportFormats[docType]}`;
+        }
+      }
+    } catch {
+      return rawUrl;
+    }
+
+    return rawUrl;
+  };
+
+  const downloadVendorReport = (report) => {
+    const targetUrl = report.fileUrl || report.reportUrl;
+
+    if (!targetUrl) {
+      return toast.error("No report file or URL available");
+    }
+
+    const downloadUrl = getDirectReportDownloadUrl(targetUrl);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = report.fileName || `${report.projectName || "vendor-report"}`;
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const sendVendorReport = async () => {
+    if (!reportVendorId) {
+      return toast.error("Please select vendor");
+    }
+
+    if (!reportEditingId && !reportFile && !reportUrlInput.trim()) {
+      return toast.error("Choose file or paste report URL");
+    }
+
+    try {
+      setReportSending(true);
+      const formData = new FormData();
+      formData.append("vendorId", reportVendorId);
+      formData.append("projectName", reportProjectName.trim());
+      formData.append("batch", reportBatch.trim());
+      formData.append("reportUrl", reportUrlInput.trim());
+
+      if (reportFile) {
+        formData.append("file", reportFile);
+      }
+
+      const response = await fetch(
+        reportEditingId
+          ? API_ENDPOINTS.ADMIN_VENDOR_REPORT(reportEditingId)
+          : API_ENDPOINTS.ADMIN_SHARE_VENDOR_REPORT,
+        {
+        method: reportEditingId ? "PATCH" : "POST",
+        body: formData,
+        }
+      );
+      const data = await readResponseSafe(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to share report");
+      }
+
+      toast.success(data.message || (reportEditingId ? "Report updated" : "Report shared with vendor"));
+      setReportModalOpen(false);
+      setReportEditingId("");
+      setReportFile(null);
+      setReportProjectName("");
+      setReportBatch("");
+      setReportUrlInput("");
+      await fetchVendorReports();
+    } catch (err) {
+      console.error("SEND VENDOR REPORT ERROR:", err);
+      toast.error(err.message || "Failed to share report");
+    } finally {
+      setReportSending(false);
+    }
+  };
+
+  const deleteVendorReport = async () => {
+    if (!reportDeleteTarget?._id) return;
+
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN_VENDOR_REPORT(reportDeleteTarget._id), {
+        method: "DELETE",
+      });
+      const data = await readResponseSafe(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to delete report");
+      }
+
+      toast.success(data.message || "Report deleted");
+      setReportDeleteTarget(null);
+      await fetchVendorReports();
+    } catch (err) {
+      console.error("DELETE VENDOR REPORT ERROR:", err);
+      toast.error(err.message || "Failed to delete report");
     }
   };
 
@@ -562,6 +809,64 @@ export default function AdminDashboard() {
     </div>
   );
 
+  const openReportMode = (mode) => {
+    setPage("report");
+    setReportMenuOpen(true);
+    setReportMode(mode);
+    closeSidebarOnMobile();
+  };
+
+  const reportMenu = () => (
+    <div>
+      <button
+        type="button"
+        onClick={() => {
+          setPage("report");
+          setReportMenuOpen((prev) => !prev);
+        }}
+        className={`w-full px-4 py-2.5 rounded-lg cursor-pointer transition flex items-center gap-3 text-sm ${
+          page === "report"
+            ? "bg-blue-600 text-white font-semibold shadow-lg"
+            : "hover:bg-gray-800 text-gray-300 hover:text-white"
+        }`}
+      >
+        <BarChart3 className="w-5 h-5" />
+        <span className="flex-1 text-left">Report</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${reportMenuOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {reportMenuOpen && (
+        <div className="mt-2 space-y-1 pl-4">
+          <button
+            type="button"
+            onClick={() => openReportMode("vendor")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
+              page === "report" && reportMode === "vendor"
+                ? "bg-cyan-500/20 text-cyan-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            Vendor Wise
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openReportMode("user")}
+            className={`w-full rounded-lg px-4 py-2 text-left text-xs transition flex items-center gap-2 ${
+              page === "report" && reportMode === "user"
+                ? "bg-purple-500/20 text-purple-200"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            User Wise
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   const StatGraph = ({ title, icon, data, accent = "blue" }) => {
     const maxValue = Math.max(...data.map((item) => Number(item.value) || 0), 1);
     const accentClasses = {
@@ -652,12 +957,13 @@ export default function AdminDashboard() {
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {isAdminMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
           {isVendorMode && menuItem("dashboard", "Dashboard", <LayoutDashboard className="w-5 h-5" />)}
+          {isVendorMode && menuItem("report", "Report", <BarChart3 className="w-5 h-5" />)}
           {isAdminMode && scriptAssignMenu()}
           {isAdminMode && menuItem("vendors", "Vendor Management", <Building2 className="w-5 h-5" />)}
           {userManagementMenu()}
           {isAdminMode && scriptManagementMenu()}
           {isAdminMode && accountManagementMenu()}
-          {isAdminMode && menuItem("settings", "Settings", <SettingsIcon className="w-5 h-5" />)}
+          {isAdminMode && reportMenu()}
           {isAdminMode && (
             <button
               onClick={() => {
@@ -679,6 +985,7 @@ export default function AdminDashboard() {
               <span>{excelDownloading ? "Downloading..." : "Download Excel"}</span>
             </button>
           )}
+          {isAdminMode && menuItem("settings", "Settings", <SettingsIcon className="w-5 h-5" />)}
         </div>
 
         <div className="p-4 border-t border-gray-800">
@@ -743,6 +1050,12 @@ export default function AdminDashboard() {
               <>
                 <SettingsIcon className="w-5 h-5 text-blue-400" />
                 <span className="truncate">Settings</span>
+              </>
+            )}
+            {page === "report" && (
+              <>
+                <BarChart3 className="w-5 h-5 text-emerald-400" />
+                <span className="truncate">Report</span>
               </>
             )}
             {page === "accountManagement" && (
@@ -898,6 +1211,72 @@ export default function AdminDashboard() {
                       Completion Rate
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isVendorMode && page === "report" && (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                <h3 className="flex items-center gap-2 text-xl font-bold text-white">
+                  <BarChart3 className="h-5 w-5 text-emerald-400" />
+                  My Reports
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  Reports shared with your vendor account are shown here.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="border-b border-gray-700 text-xs uppercase tracking-wide text-gray-400">
+                      <tr>
+                        <th className="px-3 py-3">Sr No</th>
+                        <th className="px-3 py-3">Vendor</th>
+                        <th className="px-3 py-3">Project Name</th>
+                        <th className="px-3 py-3">Batch</th>
+                        <th className="px-3 py-3">Report</th>
+                        <th className="px-3 py-3">Shared On</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {vendorReports.length === 0 && (
+                        <tr>
+                          <td className="px-3 py-5 text-center text-gray-400" colSpan={6}>
+                            No reports shared with your vendor account yet.
+                          </td>
+                        </tr>
+                      )}
+
+                      {vendorReports.map((report, index) => (
+                        <tr key={report._id} className="text-gray-200">
+                          <td className="px-3 py-3">{index + 1}</td>
+                          <td className="px-3 py-3 font-semibold">{report.vendorName}</td>
+                          <td className="px-3 py-3">{report.projectName || "N/A"}</td>
+                          <td className="px-3 py-3">{report.batch || "N/A"}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-col gap-1">
+                              {report.fileUrl && (
+                                <span className="text-blue-300">
+                                  {report.fileName || "Open file"}
+                                </span>
+                              )}
+                              {report.reportUrl && (
+                                <span className="break-all text-green-300">
+                                  {report.reportUrl}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-gray-400">
+                            {report.createdAt ? new Date(report.createdAt).toLocaleString() : "N/A"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1191,12 +1570,313 @@ export default function AdminDashboard() {
               audioOnly={scriptAudioOnly}
             />
           )}
+          {isAdminMode && page === "report" && (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-xl font-bold text-white">
+                      {reportMode === "vendor" ? (
+                        <Building2 className="h-5 w-5 text-cyan-400" />
+                      ) : (
+                        <Users className="h-5 w-5 text-purple-400" />
+                      )}
+                      {reportMode === "vendor" ? "Vendor Wise Report" : "User Wise Report"}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-400">
+                      {reportMode === "vendor"
+                        ? "Vendor registration and vendor-level activity summary."
+                        : "User, script, and recording activity summary."}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={downloadReportExcel}
+                      disabled={reportExcelDownloading}
+                      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                        reportExcelDownloading
+                          ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                          : "bg-green-600 text-white hover:bg-green-700"
+                      }`}
+                    >
+                      {reportExcelDownloading ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-200 border-t-transparent" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      {reportExcelDownloading ? "Downloading..." : "Download Excel"}
+                    </button>
+
+                  </div>
+                </div>
+              </div>
+
+              {reportMode === "vendor" && (
+                <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-lg font-bold text-white">Vendor Shared Reports</h4>
+                      <p className="text-sm text-gray-400">Reports are visible only to the selected vendor.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openShareReportModal}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Send Vendor Report
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="border-b border-gray-700 text-xs uppercase tracking-wide text-gray-400">
+                        <tr>
+                          <th className="px-3 py-3">Sr No</th>
+                          <th className="px-3 py-3">Vendor</th>
+                          <th className="px-3 py-3">Vendor Code</th>
+                          <th className="px-3 py-3">Project Name</th>
+                          <th className="px-3 py-3">Batch</th>
+                          <th className="px-3 py-3">Report</th>
+                          <th className="px-3 py-3">Shared On</th>
+                          <th className="px-3 py-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-800">
+                        {vendorReports.length === 0 && (
+                          <tr>
+                            <td className="px-3 py-5 text-center text-gray-400" colSpan={8}>
+                              No vendor report shared yet.
+                            </td>
+                          </tr>
+                        )}
+
+                        {vendorReports.map((report, index) => (
+                          <tr key={report._id} className="text-gray-200">
+                            <td className="px-3 py-3">{index + 1}</td>
+                            <td className="px-3 py-3 font-semibold">{report.vendorName}</td>
+                            <td className="px-3 py-3 font-mono text-cyan-300">{report.vendorCode || "N/A"}</td>
+                            <td className="px-3 py-3">{report.projectName || "N/A"}</td>
+                            <td className="px-3 py-3">{report.batch || "N/A"}</td>
+                            <td className="px-3 py-3">
+                              <div className="flex flex-col gap-1">
+                                {report.fileUrl && (
+                                  <span className="text-blue-300">
+                                    {report.fileName || "Open file"}
+                                  </span>
+                                )}
+                                {report.reportUrl && (
+                                  <span className="break-all text-green-300">
+                                    {report.reportUrl}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-gray-400">
+                              {report.createdAt ? new Date(report.createdAt).toLocaleString() : "N/A"}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => downloadVendorReport(report)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-blue-600/40 text-blue-300 transition hover:bg-blue-600 hover:text-white"
+                                  title="Download report"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditReportModal(report)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-600/40 text-amber-300 transition hover:bg-amber-600 hover:text-white"
+                                  title="Edit report"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setReportDeleteTarget(report)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-600/40 text-red-300 transition hover:bg-red-600 hover:text-white"
+                                  title="Delete report"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {reportMode === "user" && (
+                <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                  <h4 className="text-lg font-bold text-white">User Wise Reports</h4>
+                  <p className="mt-2 text-sm text-gray-400">
+                    Use Download Excel from above for user wise report.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           {isAdminMode && page === "settings" && <Settings />}
           {isAdminMode && page === "accountManagement" && <AccountManagement />}
           {page === "profile" && <Profile />}
 
         </div>
       </div>
+
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-xl rounded-xl border border-gray-700 bg-gray-900 p-5 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-bold text-white">
+                  {reportEditingId ? "Edit Vendor Report" : "Send Vendor Report"}
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  Select one vendor. This report will be visible only to that vendor.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportModalOpen(false)}
+                className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Vendor
+                </label>
+                <select
+                  value={reportVendorId}
+                  onChange={(event) => setReportVendorId(event.target.value)}
+                  className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="">Select vendor</option>
+                  {reportVendors.map((vendor) => (
+                    <option key={vendor._id} value={vendor._id}>
+                      {vendor.name} ({vendor.vendorCode || "N/A"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Project Name
+                  </label>
+                  <input
+                    value={reportProjectName}
+                    onChange={(event) => setReportProjectName(event.target.value)}
+                    placeholder="Enter project name"
+                    className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Batch
+                  </label>
+                  <input
+                    value={reportBatch}
+                    onChange={(event) => setReportBatch(event.target.value)}
+                    placeholder="Enter batch"
+                    className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Choose File
+                </label>
+                <input
+                  type="file"
+                  onChange={(event) => setReportFile(event.target.files?.[0] || null)}
+                  className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-gray-300 file:cursor-pointer file:rounded file:border-0 file:bg-cyan-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Or Paste Report URL
+                </label>
+                <input
+                  value={reportUrlInput}
+                  onChange={(event) => setReportUrlInput(event.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-lg border border-gray-600 bg-gray-800 p-3 text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setReportModalOpen(false)}
+                className="rounded-lg border border-gray-600 px-4 py-2 font-semibold text-gray-300 transition hover:bg-gray-800 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={sendVendorReport}
+                disabled={reportSending}
+                className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition ${
+                  reportSending
+                    ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                    : "bg-cyan-600 text-white hover:bg-cyan-700"
+                }`}
+              >
+                {reportSending ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-200 border-t-transparent" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {reportSending ? "Saving..." : reportEditingId ? "Update Report" : "Send Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reportDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-5 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">Delete Vendor Report?</h3>
+            <p className="mt-2 text-sm text-gray-400">
+              This report entry for {reportDeleteTarget.vendorName} will be permanently deleted.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setReportDeleteTarget(null)}
+                className="rounded-lg border border-gray-600 px-4 py-2 font-semibold text-gray-300 transition hover:bg-gray-800 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={deleteVendorReport}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

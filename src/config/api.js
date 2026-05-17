@@ -43,6 +43,13 @@ export const API_ENDPOINTS = {
   ADMIN_ADD_USER: `${API_BASE_URL}/api/admin/add-user`,
   ADMIN_BULK_ADD_USERS: `${API_BASE_URL}/api/admin/bulk-users`,
   ADMIN_STATS: `${API_BASE_URL}/api/admin/stats`,
+  ADMIN_REPORT_EXCEL: (mode) =>
+    `${API_BASE_URL}/api/admin/report/download-excel?mode=${encodeURIComponent(mode || "vendor")}`,
+  ADMIN_REPORT_GOOGLE_SHEET: `${API_BASE_URL}/api/admin/report/upload-google-sheet`,
+  ADMIN_VENDOR_REPORTS: (vendorId = "") =>
+    `${API_BASE_URL}/api/admin/vendor-reports${vendorId ? `?vendorId=${encodeURIComponent(vendorId)}` : ""}`,
+  ADMIN_SHARE_VENDOR_REPORT: `${API_BASE_URL}/api/admin/vendor-reports`,
+  ADMIN_VENDOR_REPORT: (id) => `${API_BASE_URL}/api/admin/vendor-reports/${id}`,
   ADMIN_SETTINGS: `${API_BASE_URL}/api/admin/settings`,
 
   // Auth endpoints
