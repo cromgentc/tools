@@ -3,7 +3,31 @@ import Script from "../models/Script.js";
 import User from "../models/User.js";
 import cloudinary, { configureCloudinary } from "../config/cloudinary.js";
 import fs from "fs";
+import { PassThrough } from "stream";
 import xlsx from "xlsx";
+
+const uploadRecordingBufferToCloudinary = (file) =>
+  new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: "video",
+        folder: "audio_uploads",
+        public_id: `recording-${Date.now()}`,
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(result);
+      }
+    );
+
+    const bufferStream = new PassThrough();
+    bufferStream.end(file.buffer);
+    bufferStream.pipe(uploadStream);
+  });
 
 // =========================
 // UPLOAD RECORDING
@@ -12,7 +36,13 @@ export const uploadAllRecordings = async (req, res) => {
   try {
     const { scriptId, userId } = req.body;
 
-    console.log("Upload request received:", { scriptId, userId, fileName: req.file?.filename, mimeType: req.file?.mimetype, size: req.file?.size });
+    console.log("Upload request received:", {
+      scriptId,
+      userId,
+      fileName: req.file?.originalname,
+      mimeType: req.file?.mimetype,
+      size: req.file?.size,
+    });
 
     // ===== VALIDATION =====
     if (!scriptId || scriptId === "null") {
@@ -55,17 +85,15 @@ export const uploadAllRecordings = async (req, res) => {
     // Check file size (max 100MB)
     const maxSize = 100 * 1024 * 1024;
     if (req.file.size > maxSize) {
-      fs.unlinkSync(req.file.path);
       return res.status(400).json({ 
         success: false,
-        message: "File size exceeds 10MB limit" 
+        message: "File size exceeds 100MB limit"
       });
     }
 
     // Verify script exists
     const script = await Script.findById(scriptId);
     if (!script) {
-      fs.unlinkSync(req.file.path);
       return res.status(404).json({ 
         success: false,
         message: "Script not found - please refresh and try again" 
@@ -86,11 +114,7 @@ export const uploadAllRecordings = async (req, res) => {
       }
 
       // Audio files are best delivered from Cloudinary via the video resource type.
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        resource_type: "video",
-        folder: "audio_uploads",
-        public_id: `recording-${Date.now()}`,
-      });
+      const result = await uploadRecordingBufferToCloudinary(req.file);
       audioLink = result.secure_url.replace("/raw/upload/", "/video/upload/");
       public_id = result.public_id;
       console.log("✅ Cloudinary upload successful:", {
@@ -101,28 +125,16 @@ export const uploadAllRecordings = async (req, res) => {
     } catch (cloudinaryErr) {
       // If Cloudinary fails, serve from local uploads folder
       console.warn("⚠️ Cloudinary upload failed, using local storage:", cloudinaryErr.message);
-      const backendBaseUrl = (
-        process.env.BACKEND_URL || "http://localhost:5000"
-      ).replace(/\/+$/, "");
-      const canUseLocalUploads =
-        process.env.NODE_ENV !== "production" && /^https?:\/\/localhost(:\d+)?$/i.test(backendBaseUrl);
-
-      if (!canUseLocalUploads) {
-        fs.unlinkSync(req.file.path);
-        return res.status(502).json({
-          success: false,
-          message:
-            "Cloudinary upload failed on live server. Please check CLOUD_NAME, API_KEY and API_SECRET environment variables.",
-        });
-      }
-
-      audioLink = `${backendBaseUrl}/uploads/${req.file.filename}`;
-      public_id = null;
+      return res.status(502).json({
+        success: false,
+        message:
+          "Cloudinary upload failed. Please check CLOUD_NAME, API_KEY and API_SECRET settings.",
+      });
     }
 
     // ===== SAVE IN MONGODB =====
     const recording = await Recording.create({
-      filename: req.file.filename,
+      filename: req.file.originalname || `recording-${Date.now()}.wav`,
       audioLink,
       public_id: public_id || null,
       scriptId,
@@ -138,11 +150,6 @@ export const uploadAllRecordings = async (req, res) => {
       audioLink,
     });
 
-    // ===== DELETE LOCAL FILE ONLY IF UPLOADED TO CLOUDINARY =====
-    if (public_id) {
-      fs.unlinkSync(req.file.path);
-    }
-
     res.json({
       success: true,
       message: "Recording uploaded successfully",
@@ -155,7 +162,7 @@ export const uploadAllRecordings = async (req, res) => {
 
   } catch (err) {
     // Clean up file on error
-    if (req.file && fs.existsSync(req.file.path)) {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
 

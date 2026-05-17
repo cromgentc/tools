@@ -1,6 +1,5 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
 import {
   uploadAllRecordings,
   getAllScriptsWithAudio,
@@ -13,14 +12,7 @@ import {
 const router = express.Router();
 
 // ===== MULTER CONFIGURATION =====
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -62,7 +54,7 @@ const handleUploadError = (req, res, next) => {
       
       let message = err.message;
       if (err.code === "LIMIT_FILE_SIZE") {
-        message = `File too large. Maximum size: 10MB, received: ${(err.limit / 1024 / 1024).toFixed(2)}MB`;
+        message = "File too large. Maximum size: 100MB";
       }
       
       return res.status(400).json({
